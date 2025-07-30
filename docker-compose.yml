@@ -1,0 +1,36 @@
+services:
+  mongodb:
+    build:
+      context: ./mongodb
+      dockerfile: Dockerfile
+    container_name: mongodb
+    ports:
+      - "${MONGO_PORT}:27017"
+    volumes:
+      - ./mongodb/mongo_data:/data/db
+      - ./mongodb/init.js:/docker-entrypoint-initdb.d/init.js:ro
+    restart: unless-stopped
+    networks:
+      - chatapp-network
+
+  auth-service:
+    build:
+      context: ./auth-service
+      dockerfile: Dockerfile
+    container_name: auth-service
+    ports:
+      - "${AUTH_SERVICE_PORT}:8082"
+    environment:
+      SPRING_DATA_MONGODB_URI: mongodb://mongodb:27017/${MONGO_DB_NAME}
+    depends_on:
+      - mongodb
+    restart: unless-stopped
+    networks:
+      - chatapp-network
+
+volumes:
+  mongo_data:
+
+networks:
+  chatapp-network:
+    driver: bridge

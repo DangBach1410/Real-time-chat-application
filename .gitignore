@@ -1,0 +1,50 @@
+# === BACKEND (Spring Boot) ===
+/target/
+/build/
+!.mvn/wrapper/maven-wrapper.jar
+**/application-*.yml
+**/application-*.properties
+.gradle/
+.mvn/
+logs/
+*.log
+*.class
+
+# === FRONTEND (React/React Native) ===
+/node_modules/
+*.log
+.env
+.env.*.local
+/build/
+/dist/
+/.cache/
+.vite/
+
+# === OS Files ===
+.DS_Store
+Thumbs.db
+
+# === IDE Files ===
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.swp
+
+# === Docker and Misc ===
+docker-compose.override.yml
+*.pid
+*.seed
+*.bak
+*.sw?
+
+# === MongoDB ===
+mongodb/mongo_data/
+
+# === Workspace ===
+*.code-workspace
+
+# === Other ===
+/tmp/
+*.gz
