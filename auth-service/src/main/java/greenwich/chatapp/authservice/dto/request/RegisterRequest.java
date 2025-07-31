@@ -12,7 +12,10 @@ public class RegisterRequest {
     @NotBlank(message = "Username must not be blank")
     private String username;
 
+    @NotBlank(message = "First name must not be blank")
     private String firstName;
+
+    @NotBlank(message = "Last name must not be blank")
     private String lastName;
 
     @Email(message = "Malformed email")
