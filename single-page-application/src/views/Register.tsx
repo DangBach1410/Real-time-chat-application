@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { register } from '../helpers/authApi';
-import type { RegisterData } from '../helpers/authApi';
+import type { RegisterRequest } from '../helpers/authApi';
 import { AiOutlineEye, AiOutlineEyeInvisible } from 'react-icons/ai';
 
 export default function Register() {
-  const [formData, setFormData] = useState<RegisterData>({
+  const [formData, setFormData] = useState<RegisterRequest>({
     username: '',
     firstName: '',
     lastName: '',

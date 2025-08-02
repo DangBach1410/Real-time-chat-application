@@ -1,7 +1,9 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { login } from '../helpers/authApi';
 import { AiOutlineEye, AiOutlineEyeInvisible } from 'react-icons/ai';
+import type { LoginRequest, LoginResponse } from '../helpers/authApi';
 
 export default function Login() {
   const location = useLocation();
@@ -11,27 +13,40 @@ export default function Login() {
   useEffect(() => {
     if (location.state?.successMessage) {
       setSuccessMessage(location.state.successMessage);
-
-      // Clear success message from history state
       window.history.replaceState({}, document.title, window.location.pathname);
-
-      // Tự động ẩn sau 5 giây
       const timer = setTimeout(() => {
         setSuccessMessage('');
       }, 5000);
-
       return () => clearTimeout(timer);
     }
-  }, [location, navigate]);
+  }, [location]);
 
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [formData, setFormData] = useState<LoginRequest>({
+    username: '',
+    password: ''
+  });
   const [showPassword, setShowPassword] = useState(false);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Gọi API đăng nhập tại đây
-    console.log({ username, password });
+
+    try {
+      const response = await login(formData);
+      const { accessToken, refreshToken } = response.data as LoginResponse;
+
+      localStorage.setItem('accessToken', accessToken);
+      localStorage.setItem('refreshToken', refreshToken);
+
+      navigate('/chat');
+    } catch (error: any) {
+      console.error('Login failed', error);
+      alert(error.response?.data?.message || 'Login failed');
+    }
   };
 
   const handleGoogleLogin = () => {
@@ -57,10 +72,11 @@ export default function Login() {
           <div>
             <label className="block mb-1">Username</label>
             <input
+              name="username"
               type="text"
               className="w-full border px-3 py-2 rounded"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              value={formData.username}
+              onChange={handleInputChange}
               required
             />
           </div>
@@ -68,10 +84,11 @@ export default function Login() {
             <label className="block mb-1">Password</label>
             <div className="relative">
               <input
+                name="password"
                 type={showPassword ? 'text' : 'password'}
                 className="w-full border px-3 py-2 rounded pr-10"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                value={formData.password}
+                onChange={handleInputChange}
                 required
               />
               <button
@@ -89,7 +106,7 @@ export default function Login() {
           </div>
           <button
             type="submit"
-            className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700"
+            className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 transition"
           >
             Login
           </button>
@@ -122,7 +139,7 @@ export default function Login() {
         </button>
 
         <p className="text-center mt-4">
-          Don't have an account?{' '}
+          Don&apos;t have an account?{' '}
           <Link to="/register" className="text-blue-600 hover:underline">
             Register
           </Link>

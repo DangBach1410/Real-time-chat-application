@@ -10,7 +10,7 @@ import org.springframework.security.web.SecurityFilterChain;
 @EnableWebSecurity
 public class SecurityConfig {
     private static final String[] WHITE_LIST_URL = {
-        "/api/v1/users/register",
+        "/api/v1/users/register", "/api/v1/auth/login", "/api/v1/auth/refresh-token"
     };
 
     @SuppressWarnings("removal")

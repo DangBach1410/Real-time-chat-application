@@ -4,6 +4,11 @@ import lombok.*;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 import greenwich.chatapp.authservice.enums.Role;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.userdetails.UserDetails;
+
+import java.util.Collection;
+import java.util.List;
 
 @Getter
 @Setter
@@ -11,7 +16,7 @@ import greenwich.chatapp.authservice.enums.Role;
 @AllArgsConstructor
 @Builder
 @Document(collection = "users")
-public class UserEntity {
+public class UserEntity implements UserDetails {
 
     @Id
     private String id;
@@ -24,4 +29,9 @@ public class UserEntity {
     private String accessToken;
     private String refreshToken;
     private Role role;
+
+    @Override
+    public Collection<? extends GrantedAuthority> getAuthorities() {
+        return List.of();
+    }
 }
