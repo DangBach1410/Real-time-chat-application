@@ -1,6 +1,8 @@
 package greenwich.chatapp.authservice.service;
 
+import greenwich.chatapp.authservice.dto.response.VerifyTokenResponse;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -11,8 +13,10 @@ import greenwich.chatapp.authservice.dto.response.LoginResponse;
 import greenwich.chatapp.authservice.entity.UserEntity;
 import greenwich.chatapp.authservice.repository.UserRepository;
 
+import java.util.Base64;
 import java.util.Optional;
 
+@Slf4j
 @RequiredArgsConstructor
 @Service
 public class AuthenticationService {
@@ -96,6 +100,46 @@ public class AuthenticationService {
                 .userId(userEntity.getId())
                 .message("Refresh token successfully")
                 .status(HttpStatus.OK.value())
+                .build();
+    }
+    public VerifyTokenResponse verifyToken(String authHeader) {
+        log.info("Verifying token with header: {}", authHeader);
+        if (!StringUtils.hasText(authHeader) || !authHeader.startsWith("Bearer ")) {
+            log.error("verifyToken|Authorization header is missing or invalid");
+            return VerifyTokenResponse.builder()
+                    .status(HttpStatus.UNAUTHORIZED.value())
+                    .message("Invalid token")
+                    .build();
+        }
+        String token = authHeader.substring(TOKEN_INDEX);
+        if (!jwtService.validateToken(token)) {
+            log.error("verifyToken|Invalid token");
+            return VerifyTokenResponse.builder()
+                    .status(HttpStatus.UNAUTHORIZED.value())
+                    .message("Invalid token")
+                    .build();
+        }
+
+        String username = jwtService.extractUsername(token);
+        Optional<UserEntity> userFoundByUsername = userRepository.findByUsername(username);
+        if (userFoundByUsername.isEmpty()) {
+            log.error("verifyToken|User not found for username: {}", username);
+            return VerifyTokenResponse.builder()
+                    .status(HttpStatus.UNAUTHORIZED.value())
+                    .message("Token revoked")
+                    .build();
+        }
+
+        String role = userFoundByUsername.get().getRole().name();
+        String userInfoStr = username + ":" + role;
+        String xUserToken = Base64.getEncoder().encodeToString(userInfoStr.getBytes());
+
+        log.info("verifyToken|X-User-Token: {}", xUserToken);
+
+        return VerifyTokenResponse.builder()
+                .status(HttpStatus.OK.value())
+                .message("Success")
+                .xUserToken(xUserToken)
                 .build();
     }
 }

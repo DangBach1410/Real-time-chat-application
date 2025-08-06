@@ -13,7 +13,7 @@ import greenwich.chatapp.authservice.service.UserService;
 
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/v1/users")
+@RequestMapping("/api/v1/auth/users")
 public class UserController {
 
     private final UserService userService;

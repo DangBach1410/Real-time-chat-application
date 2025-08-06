@@ -13,6 +13,33 @@ services:
     networks:
       - chatapp-network
 
+  service-registry:
+    build:
+      context: ./service-registry
+      dockerfile: Dockerfile
+    container_name: service-registry
+    ports:
+      - "${SERVICE_REGISTRY_PORT}:8761"
+    environment:
+      SPRING_APPLICATION_NAME: service-registry
+    networks:
+      - chatapp-network
+
+  api-gateway:
+    container_name: api-gateway
+    build:
+      context: ./api-gateway
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "${API_GATEWAY_PORT}:8762"
+    depends_on:
+      - service-registry
+    networks:
+      - chatapp-network
+    environment:
+      EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE: http://service-registry:8761/eureka/
+
   auth-service:
     build:
       context: ./auth-service
@@ -24,6 +51,7 @@ services:
       SPRING_DATA_MONGODB_URI: mongodb://mongodb:27017/${MONGO_DB_NAME}
     depends_on:
       - mongodb
+      - service-registry
     restart: unless-stopped
     networks:
       - chatapp-network
