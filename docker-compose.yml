@@ -56,6 +56,22 @@ services:
     networks:
       - chatapp-network
 
+  chat-service:
+    build:
+      context: ./chat-service
+      dockerfile: Dockerfile
+    container_name: chat-service
+    ports:
+      - "${CHAT_SERVICE_PORT}:8083"
+    environment:
+      SPRING_DATA_MONGODB_URI: mongodb://mongodb:27017/${MONGO_DB_NAME}
+    depends_on:
+      - mongodb
+      - service-registry
+    restart: unless-stopped
+    networks:
+      - chatapp-network
+
 volumes:
   mongo_data:
 
