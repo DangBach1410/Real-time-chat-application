@@ -4,8 +4,10 @@ import greenwich.chatapp.chatservice.dto.request.MessageCreateRequest;
 import greenwich.chatapp.chatservice.dto.response.MessageResponse;
 import greenwich.chatapp.chatservice.service.MessageService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -19,6 +21,17 @@ public class MessageController {
     @PostMapping
     public ResponseEntity<MessageResponse> createMessage(@RequestBody MessageCreateRequest request) {
         return messageService.createMessage(request);
+    }
+
+    @PostMapping(value = "/media", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<List<MessageResponse>> createMediaMessages(
+            @RequestParam String conversationId,
+            @RequestParam String senderId,
+            @RequestParam String senderName,
+            @RequestParam String senderAvatar,
+            @RequestPart("files") List<MultipartFile> files
+    ) {
+        return messageService.createMediaMessages(conversationId, senderId, senderName, senderAvatar, files);
     }
 
     @GetMapping("/conversation/{conversationId}")

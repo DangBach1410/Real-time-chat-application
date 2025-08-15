@@ -17,7 +17,7 @@ public class MessageEntity {
     private String id;
     private String conversationId;
     private MemberEntity sender;
-    private String type; // text | image | video | file
-    private String content;
+    private String type; // "text" hoặc "media"
+    private String content; // TEXT thì là chuỗi, MEDIA thì là JSON string chứa metadata
     private LocalDateTime createdAt;
 }
