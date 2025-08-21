@@ -42,6 +42,9 @@ docker-compose.override.yml
 # === MongoDB ===
 mongodb/mongo_data/
 
+# === MinIO ===
+minio/data/
+
 # === Workspace ===
 *.code-workspace
 

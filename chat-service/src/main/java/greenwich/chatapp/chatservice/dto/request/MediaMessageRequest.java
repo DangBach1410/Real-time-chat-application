@@ -11,8 +11,8 @@ import org.springframework.web.multipart.MultipartFile;
 public class MediaMessageRequest {
     private String conversationId;
     private String senderId;
-    private String senderName;
-    private String senderAvatar;
+    private String senderFullName;
+    private String senderImageUrl;
     private String type;
     private MultipartFile file;
 }

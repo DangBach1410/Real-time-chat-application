@@ -45,11 +45,6 @@ public class AuthenticationService {
         String accessToken = jwtService.generateAccessToken(userEntity);
         String refreshToken = jwtService.generateRefreshToken(userEntity);
 
-        userEntity.setAccessToken(accessToken);
-        userEntity.setRefreshToken(refreshToken);
-
-        userRepository.save(userEntity);
-
         return LoginResponse.builder()
                 .status(HttpStatus.OK.value())
                 .message("Login successful")
@@ -88,10 +83,6 @@ public class AuthenticationService {
         UserEntity userEntity = userFoundByUsername.get();
         String accessToken = jwtService.generateAccessToken(userEntity);
         String newRefreshToken = jwtService.generateRefreshToken(userEntity);
-
-        userEntity.setAccessToken(accessToken);
-        userEntity.setRefreshToken(newRefreshToken);
-        userRepository.save(userEntity);
 
         //Response access token and refresh token to client
         return LoginResponse.builder()

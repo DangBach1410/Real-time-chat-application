@@ -1,8 +1,6 @@
 // src/helpers/authApi.ts
 import api from './axiosInterceptor';
 
-const AUTH_BASE_URL = 'http://localhost:8082/api/v1';
-
 export interface RegisterRequest {
   username: string;
   firstName: string;
@@ -13,7 +11,7 @@ export interface RegisterRequest {
 }
 
 export const register = (data: RegisterRequest) => {
-  return api.post(`${AUTH_BASE_URL}/users/register`, data);
+  return api.post('/auth/users/register', data);
 };
 
 export interface LoginRequest {
@@ -24,9 +22,9 @@ export interface LoginRequest {
 export interface LoginResponse {
   accessToken: string;
   refreshToken: string;
+  userId: string;
 }
 
 export const login = (data: LoginRequest) => {
-  return api.post(`${AUTH_BASE_URL}/auth/login`, data);
+  return api.post<LoginResponse>('/auth/login', data);
 };
-

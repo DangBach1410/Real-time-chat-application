@@ -18,6 +18,7 @@ public class ConversationEntity {
     private String id;
     private String type; // private | group
     private String name; // chỉ có nếu type = group
+    private String imageUrl;
     private List<MemberEntity> members;
     private LastMessageEntity lastMessage;
     private LocalDateTime lastMessageAt;

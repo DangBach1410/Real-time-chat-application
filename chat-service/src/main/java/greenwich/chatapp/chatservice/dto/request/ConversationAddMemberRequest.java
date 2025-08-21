@@ -19,8 +19,8 @@ public class ConversationAddMemberRequest {
     @Builder
     public static class MemberRequest {
         private String userId;
-        private String displayName;
-        private String avatar;
+        private String fullName;
+        private String imageUrl;
         private String role;
     }
 }

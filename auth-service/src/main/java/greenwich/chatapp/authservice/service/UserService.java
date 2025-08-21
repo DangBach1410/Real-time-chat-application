@@ -1,5 +1,8 @@
 package greenwich.chatapp.authservice.service;
 
+import greenwich.chatapp.authservice.dto.request.UpdateRequest;
+import greenwich.chatapp.authservice.dto.response.UserResponse;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -41,6 +44,7 @@ public class UserService {
                 .username(username)
                 .firstName(firstName)
                 .lastName(lastName)
+                .fullName(firstName + " " + lastName)
                 .email(email)
                 .password(passwordEncoder.encode(password))
                 .role(Role.valueOf(role.toUpperCase()))
@@ -51,6 +55,54 @@ public class UserService {
         return RegisterResponse.builder()
                 .status(HttpStatus.CREATED.value())
                 .message("User registered successfully")
+                .build();
+    }
+
+    public UserResponse getUserById(String id) {
+        Optional<UserEntity> userEntity = userRepository.findById(id);
+
+        if (userEntity.isEmpty()) {
+            return UserResponse.builder()
+                    .status(HttpStatus.NOT_FOUND.value())
+                    .message("User not found")
+                    .build();
+        }
+
+        UserEntity user = userEntity.get();
+        return UserResponse.builder()
+                .status(HttpStatus.OK.value())
+                .message("User found")
+                .fullName(user.getFullName())
+                .email(user.getEmail())
+                .imageUrl(user.getImageUrl())
+                .build();
+    }
+
+    public UserResponse updateUser(String id, @Valid UpdateRequest request) {
+        Optional<UserEntity> userEntity = userRepository.findById(id);
+
+        if (userEntity.isEmpty()) {
+            return UserResponse.builder()
+                    .status(HttpStatus.NOT_FOUND.value())
+                    .message("User not found")
+                    .build();
+        }
+
+        UserEntity user = userEntity.get();
+        user.setFirstName(request.getFirstName());
+        user.setLastName(request.getLastName());
+        user.setFullName(request.getFirstName() + " " + request.getLastName());
+        user.setEmail(request.getEmail());
+        user.setImageUrl(request.getImageUrl());
+
+        userRepository.save(user);
+
+        return UserResponse.builder()
+                .status(HttpStatus.OK.value())
+                .message("User updated successfully")
+                .fullName(user.getFullName())
+                .email(user.getEmail())
+                .imageUrl(user.getImageUrl())
                 .build();
     }
 }

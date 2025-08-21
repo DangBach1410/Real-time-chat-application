@@ -10,8 +10,8 @@ import lombok.*;
 public class MessageCreateRequest {
     private String conversationId;
     private String senderId;
-    private String senderName;
-    private String senderAvatar;
+    private String senderFullName;
+    private String senderImageUrl;
     private String type;
     private String content;
 }

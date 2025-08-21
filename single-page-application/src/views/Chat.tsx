@@ -1,73 +1,48 @@
-import { useState } from 'react';
+import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
+import Navbar from "../components/Navbar";
+import ChatView from "../components/ChatView";
+import SearchResult from "../components/SearchResult";
+import Profile from "../components/Profile";
+
+function isTokenExpired(token: string): boolean {
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    const exp = payload.exp * 1000; // exp trong JWT tính bằng giây
+    return Date.now() >= exp;
+  } catch (e) {
+    return true;
+  }
+}
 
 export default function Chat() {
-  const [selectedGroup, setSelectedGroup] = useState<string | null>(null);
+  const [view, setView] = useState<"chat" | "search" | "profile">("chat");
+  const [searchQuery, setSearchQuery] = useState("");
+  const navigate = useNavigate();
 
-  const groups = [
-    { id: '1', name: 'Project A', avatar: 'https://i.pravatar.cc/150?img=1' },
-    { id: '2', name: 'Team Chat', avatar: 'https://i.pravatar.cc/150?img=2' },
-    { id: '3', name: 'Friends', avatar: 'https://i.pravatar.cc/150?img=3' }
-  ];
+  useEffect(() => {
+    const token = localStorage.getItem("accessToken");
+
+    if (!token || isTokenExpired(token)) {
+      localStorage.clear();
+      navigate("/login");
+    }
+  }, [navigate]);
 
   return (
     <div className="h-screen flex flex-col">
-      {/* Top Bar */}
-      <div className="flex items-center justify-between px-6 py-3 bg-white shadow-md border-b">
-        <div className="text-2xl font-bold text-blue-600">JoFox</div>
+      <Navbar
+        onSearch={(value) => {
+          setSearchQuery(value);
+          setView("search");
+        }}
+        onNavigate={setView}
+      />
 
-        <div className="flex-1 mx-6">
-          <input
-            type="text"
-            placeholder="Search..."
-            className="w-full px-4 py-2 rounded-md border border-gray-300 focus:outline-none focus:ring focus:border-blue-500"
-          />
-        </div>
-
-        <div>
-          <img
-            src="https://i.pravatar.cc/40"
-            alt="User Avatar"
-            className="w-10 h-10 rounded-full"
-          />
-        </div>
-      </div>
-
-      {/* Main Body */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Sidebar - Chat Group List */}
-        <aside className="w-64 bg-gray-100 border-r overflow-y-auto">
-          {groups.map((group) => (
-            <div
-              key={group.id}
-              onClick={() => setSelectedGroup(group.id)}
-              className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-200 ${
-                selectedGroup === group.id ? 'bg-gray-300' : ''
-              }`}
-            >
-              <img
-                src={group.avatar}
-                alt={group.name}
-                className="w-10 h-10 rounded-full"
-              />
-              <span className="font-medium">{group.name}</span>
-            </div>
-          ))}
-        </aside>
-
-        {/* Chat Area */}
-        <main className="flex-1 flex items-center justify-center bg-white">
-          {selectedGroup ? (
-            <div className="text-gray-700 text-xl">
-              Messages for group ID: {selectedGroup}
-              {/* TODO: Replace with actual message list */}
-            </div>
-          ) : (
-            <div className="text-gray-500 text-2xl font-semibold text-center px-4">
-              Welcome to JoFox
-            </div>
-          )}
-        </main>
-      </div>
+      {/* Body */}
+      {view === "chat" && <ChatView />}
+      {view === "search" && <SearchResult query={searchQuery} />}
+      {view === "profile" && <Profile />}
     </div>
   );
 }

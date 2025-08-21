@@ -34,8 +34,8 @@ public class ConversationServiceImpl implements ConversationService {
                 .members(request.getMembers().stream().map(m ->
                         MemberEntity.builder()
                                 .userId(m.getUserId())
-                                .displayName(m.getDisplayName())
-                                .avatar(m.getAvatar())
+                                .fullName(m.getFullName())
+                                .imageUrl(m.getImageUrl())
                                 .role(m.getRole())
                                 .joinedAt(LocalDateTime.now())
                                 .build()
@@ -56,8 +56,8 @@ public class ConversationServiceImpl implements ConversationService {
             for (ConversationAddMemberRequest.MemberRequest m : request.getMembers()) {
                 MemberEntity newMember = MemberEntity.builder()
                         .userId(m.getUserId())
-                        .displayName(m.getDisplayName())
-                        .avatar(m.getAvatar())
+                        .fullName(m.getFullName())
+                        .imageUrl(m.getImageUrl())
                         .role(m.getRole())
                         .joinedAt(LocalDateTime.now())
                         .build();

@@ -1,5 +1,6 @@
 package greenwich.chatapp.authservice.entity;
 
+import greenwich.chatapp.authservice.oauth2.common.AuthProvider;
 import lombok.*;
 import org.bson.types.ObjectId;
 import org.springframework.data.annotation.Id;
@@ -25,11 +26,13 @@ public class UserEntity implements UserDetails {
     private String username;
     private String firstName;
     private String lastName;
+    private String fullName;
     private String email;
     private String password;
-    private String accessToken;
-    private String refreshToken;
     private Role role;
+    private AuthProvider provider;
+    private String providerId;
+    private String imageUrl;
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {

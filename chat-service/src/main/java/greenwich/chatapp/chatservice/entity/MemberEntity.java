@@ -10,8 +10,8 @@ import java.time.LocalDateTime;
 @Builder
 public class MemberEntity {
     private String userId;
-    private String displayName;
-    private String avatar;
+    private String fullName;
+    private String imageUrl;
     private String role; // admin | member
     private LocalDateTime joinedAt;
 }

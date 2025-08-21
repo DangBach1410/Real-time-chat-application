@@ -37,24 +37,26 @@ export default function Login() {
 
     try {
       const response = await login(formData);
-      const { accessToken, refreshToken } = response.data as LoginResponse;
+      const { accessToken, refreshToken, userId } = response.data as LoginResponse;
 
-      localStorage.setItem('accessToken', accessToken);
-      localStorage.setItem('refreshToken', refreshToken);
+      // Lưu token + userId vào localStorage
+      localStorage.setItem("accessToken", accessToken);
+      localStorage.setItem("refreshToken", refreshToken);
+      localStorage.setItem("userId", userId);
 
-      navigate('/chat');
+      navigate("/chat");
     } catch (error: any) {
-      console.error('Login failed', error);
-      alert(error.response?.data?.message || 'Login failed');
+      console.error("Login failed", error);
+      alert(error.response?.data?.message || "Login failed");
     }
   };
 
   const handleGoogleLogin = () => {
-    window.location.href = 'http://localhost:8082/oauth2/authorization/google';
+    window.location.href = 'http://localhost:8762/oauth2/authorize/google';
   };
 
   const handleGithubLogin = () => {
-    window.location.href = 'http://localhost:8082/oauth2/authorization/github';
+    window.location.href = 'http://localhost:8762/oauth2/authorize/github';
   };
 
   return (

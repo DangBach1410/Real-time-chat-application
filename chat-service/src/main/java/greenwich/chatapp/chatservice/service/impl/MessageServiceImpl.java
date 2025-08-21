@@ -38,8 +38,8 @@ public class MessageServiceImpl implements MessageService {
     public ResponseEntity<MessageResponse> createMessage(MessageCreateRequest request) {
         MemberEntity sender = MemberEntity.builder()
                 .userId(request.getSenderId())
-                .displayName(request.getSenderName())
-                .avatar(request.getSenderAvatar())
+                .fullName(request.getSenderFullName())
+                .imageUrl(request.getSenderImageUrl())
                 .build();
 
         MessageEntity message = MessageEntity.builder()
@@ -75,8 +75,8 @@ public class MessageServiceImpl implements MessageService {
 
         MemberEntity sender = MemberEntity.builder()
                 .userId(senderId)
-                .displayName(senderName)
-                .avatar(senderAvatar)
+                .fullName(senderName)
+                .imageUrl(senderAvatar)
                 .build();
 
         // Gọi Media-service upload tất cả files
