@@ -10,6 +10,7 @@ import lombok.Getter;
 @AllArgsConstructor
 public class RegisterRequest {
     @NotBlank(message = "Username must not be blank")
+    @Pattern(regexp = "^[^@]*$", message = "Username cannot be an email address")
     private String username;
 
     @NotBlank(message = "First name must not be blank")

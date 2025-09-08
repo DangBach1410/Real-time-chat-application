@@ -16,21 +16,34 @@ export default function Register() {
 
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<{ [key: string]: string }>({});
   const navigate = useNavigate();
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
+    setFieldErrors({ ...fieldErrors, [e.target.name]: '' }); // Xóa lỗi khi người dùng sửa
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
+    setFieldErrors({});
     try {
       await register(formData);
       navigate('/login', {
         state: { successMessage: 'Register successfully. Please login.' },
       });
     } catch (err: any) {
-      setError(err?.response?.data?.message || 'Registration failed');
+      // Nếu lỗi là object từng trường hoặc có message chung
+      if (err?.response?.data) {
+        if (err.response.data.message) {
+          setError(err.response.data.message);
+        } else {
+          setFieldErrors(err.response.data);
+        }
+      } else {
+        setError('Registration failed');
+      }
     }
   };
 
@@ -54,6 +67,9 @@ export default function Register() {
               onChange={handleChange}
               required
             />
+            {fieldErrors.username && (
+              <div className="text-red-600 text-sm mt-1">{fieldErrors.username}</div>
+            )}
           </div>
 
           <div>
@@ -66,6 +82,9 @@ export default function Register() {
               onChange={handleChange}
               required
             />
+            {fieldErrors.firstName && (
+              <div className="text-red-600 text-sm mt-1">{fieldErrors.firstName}</div>
+            )}
           </div>
 
           <div>
@@ -78,6 +97,9 @@ export default function Register() {
               onChange={handleChange}
               required
             />
+            {fieldErrors.lastName && (
+              <div className="text-red-600 text-sm mt-1">{fieldErrors.lastName}</div>
+            )}
           </div>
 
           <div>
@@ -90,6 +112,9 @@ export default function Register() {
               onChange={handleChange}
               required
             />
+            {fieldErrors.email && (
+              <div className="text-red-600 text-sm mt-1">{fieldErrors.email}</div>
+            )}
           </div>
 
           <div>
@@ -115,6 +140,9 @@ export default function Register() {
                 )}
               </button>
             </div>
+            {fieldErrors.password && (
+              <div className="text-red-600 text-sm mt-1">{fieldErrors.password}</div>
+            )}
           </div>
 
           <button

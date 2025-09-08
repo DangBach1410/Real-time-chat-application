@@ -13,6 +13,7 @@ public class ConversationResponse {
     private String id;
     private String type;
     private String name;
+    private String imageUrl;
     private List<MemberResponse> members;
     private LastMessageResponse lastMessage;
     private LocalDateTime lastMessageAt;

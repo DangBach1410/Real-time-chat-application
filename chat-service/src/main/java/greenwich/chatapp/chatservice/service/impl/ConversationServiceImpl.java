@@ -17,6 +17,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -28,6 +29,16 @@ public class ConversationServiceImpl implements ConversationService {
 
     @Override
     public ResponseEntity<ConversationResponse> createConversation(ConversationCreateRequest request) {
+        if ("private".equalsIgnoreCase(request.getType()) && request.getMembers().size() == 2) {
+            String userId1 = request.getMembers().get(0).getUserId();
+            String userId2 = request.getMembers().get(1).getUserId();
+
+            Optional<ConversationEntity> existing = conversationRepository.findPrivateConversation(userId1, userId2);
+            if (existing.isPresent()) {
+                return ResponseEntity.ok(modelMapper.map(existing.get(), ConversationResponse.class));
+            }
+        }
+
         ConversationEntity conversation = ConversationEntity.builder()
                 .type(request.getType())
                 .name(request.getName())

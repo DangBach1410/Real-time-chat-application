@@ -1,14 +1,17 @@
 package greenwich.chatapp.authservice.controller;
 
 import greenwich.chatapp.authservice.dto.request.UpdateRequest;
-import greenwich.chatapp.authservice.dto.response.UserResponse;
+import greenwich.chatapp.authservice.dto.response.*;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import greenwich.chatapp.authservice.dto.request.RegisterRequest;
-import greenwich.chatapp.authservice.dto.response.RegisterResponse;
 import greenwich.chatapp.authservice.service.UserService;
+
+import java.util.List;
 
 @RestController
 @RequiredArgsConstructor
@@ -33,5 +36,63 @@ public class UserController {
     public ResponseEntity<UserResponse> updateUser(@PathVariable String id, @RequestBody @Valid UpdateRequest request) {
         UserResponse response = userService.updateUser(id, request);
         return ResponseEntity.status(response.getStatus()).body(response);
+    }
+
+    @PostMapping("/{receiverId}/friend-requests")
+    public ResponseEntity<FriendRequestResponse> sendFriendRequest(
+            @PathVariable String receiverId,
+            @RequestParam String senderId
+    ) {
+        FriendRequestResponse response = userService.sendFriendRequest(senderId, receiverId);
+        return ResponseEntity.status(response.getStatus()).body(response);
+    }
+
+    @PostMapping("/{receiverId}/friend-requests/{senderId}/accept")
+    public ResponseEntity<AddFriendResponse> acceptFriendRequest(
+            @PathVariable String receiverId,
+            @PathVariable String senderId
+    ) {
+        AddFriendResponse response = userService.acceptFriendRequest(receiverId, senderId);
+        return ResponseEntity.status(response.getStatus()).body(response);
+    }
+
+    @DeleteMapping("/{receiverId}/friend-requests/{senderId}")
+    public ResponseEntity<FriendRequestResponse> deleteFriendRequest(
+            @PathVariable String receiverId,
+            @PathVariable String senderId
+    ) {
+        FriendRequestResponse response = userService.deleteFriendRequest(receiverId, senderId);
+        return ResponseEntity.status(response.getStatus()).body(response);
+    }
+
+    @GetMapping("/{id}/friends")
+    public ResponseEntity<List<GetFriendResponse>> getFriends(@PathVariable String id) {
+        return ResponseEntity.ok(userService.getFriends(id));
+    }
+
+    @GetMapping("/{id}/friend-requests")
+    public ResponseEntity<List<GetFriendRequestResponse>> getFriendRequests(@PathVariable String id) {
+        return ResponseEntity.ok(userService.getFriendRequests(id));
+    }
+
+    @DeleteMapping("/{userId}/friends/{friendId}")
+    public ResponseEntity<Void> unfriend(
+            @PathVariable String userId,
+            @PathVariable String friendId
+    ) {
+        userService.unfriend(userId, friendId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/search")
+    public ResponseEntity<List<SearchUserResponse>> searchUsers(
+            @RequestParam String currentUserId,
+            @RequestParam String keyword,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size
+    ) {
+        Pageable pageable = PageRequest.of(page, size);
+        List<SearchUserResponse> response = userService.searchUsers(currentUserId, keyword, pageable);
+        return ResponseEntity.ok(response);
     }
 }

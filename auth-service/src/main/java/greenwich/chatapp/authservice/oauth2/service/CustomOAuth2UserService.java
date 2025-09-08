@@ -1,5 +1,7 @@
 package greenwich.chatapp.authservice.oauth2.service;
 
+import greenwich.chatapp.authservice.enums.Role;
+import greenwich.chatapp.authservice.util.UnicodeUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.InternalAuthenticationServiceException;
 import org.springframework.security.oauth2.client.userinfo.DefaultOAuth2UserService;
@@ -43,7 +45,7 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
 
         if (userOptional.isPresent()) {
             user = userOptional.get();
-            user = updateExistingUser(user, oAuth2UserInfo);
+            user = updateExistingUser(user, oAuth2UserInfo, oAuth2UserRequest);
         } else {
             user = registerNewUser(oAuth2UserRequest, oAuth2UserInfo);
         }
@@ -59,12 +61,17 @@ public class CustomOAuth2UserService extends DefaultOAuth2UserService {
         user.setFullName(oAuth2UserInfo.getName());
         user.setEmail(oAuth2UserInfo.getEmail());
         user.setImageUrl(oAuth2UserInfo.getImageUrl());
+        user.setSearchFullName(UnicodeUtils.toSearchable(oAuth2UserInfo.getName()));
+        user.setRole(Role.USER);
         return userRepository.save(user);
     }
 
-    private UserEntity updateExistingUser(UserEntity existingUser, OAuth2UserInfo oAuth2UserInfo) {
+    private UserEntity updateExistingUser(UserEntity existingUser, OAuth2UserInfo oAuth2UserInfo, OAuth2UserRequest oAuth2UserRequest) {
         existingUser.setFullName(oAuth2UserInfo.getName());
         existingUser.setImageUrl(oAuth2UserInfo.getImageUrl());
+        existingUser.setProvider(AuthProvider.valueOf(oAuth2UserRequest.getClientRegistration().getRegistrationId()));
+        existingUser.setProviderId(oAuth2UserInfo.getId());
+        existingUser.setSearchFullName(UnicodeUtils.toSearchable(oAuth2UserInfo.getName()));
         return userRepository.save(existingUser);
     }
 }

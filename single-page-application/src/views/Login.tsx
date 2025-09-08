@@ -9,6 +9,7 @@ export default function Login() {
   const location = useLocation();
   const navigate = useNavigate();
   const [successMessage, setSuccessMessage] = useState('');
+  const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
     if (location.state?.successMessage) {
@@ -47,7 +48,7 @@ export default function Login() {
       navigate("/chat");
     } catch (error: any) {
       console.error("Login failed", error);
-      alert(error.response?.data?.message || "Login failed");
+      setErrorMessage(error.response?.data?.message || "Login failed");
     }
   };
 
@@ -67,6 +68,12 @@ export default function Login() {
         {successMessage && (
           <div className="mb-4 p-3 bg-green-100 text-green-700 rounded text-center">
             {successMessage}
+          </div>
+        )}
+
+        {errorMessage && (
+          <div className="mb-4 p-3 bg-red-100 text-red-700 rounded text-center">
+            {errorMessage}
           </div>
         )}
 

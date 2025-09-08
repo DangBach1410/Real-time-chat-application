@@ -2,13 +2,13 @@ package greenwich.chatapp.authservice.entity;
 
 import greenwich.chatapp.authservice.oauth2.common.AuthProvider;
 import lombok.*;
-import org.bson.types.ObjectId;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.mongodb.core.mapping.Document;
 import greenwich.chatapp.authservice.enums.Role;
 import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
@@ -19,10 +19,8 @@ import java.util.List;
 @Builder
 @Document(collection = "users")
 public class UserEntity implements UserDetails {
-
     @Id
     private String id;
-
     private String username;
     private String firstName;
     private String lastName;
@@ -34,8 +32,41 @@ public class UserEntity implements UserDetails {
     private String providerId;
     private String imageUrl;
 
+    // 🔹 Chỉ cần cho fullName
+    private String searchFullName;
+
+    private List<Friend> friends = new ArrayList<>();
+    private List<FriendRequest> friendRequests = new ArrayList<>();
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class Friend {
+        private String id;
+        private String fullName;
+        private String email;
+        private String imageUrl;
+        private String searchFullName;
+    }
+
+    @Getter
+    @Setter
+    @NoArgsConstructor
+    @AllArgsConstructor
+    @Builder
+    public static class FriendRequest {
+        private String senderId;
+        private String senderFullName;
+        private String senderEmail;
+        private String senderImageUrl;
+    }
+
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return List.of();
     }
 }
+
+
