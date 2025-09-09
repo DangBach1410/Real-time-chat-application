@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import {
-  fetchConversationsApi,
-  fetchMessagesApi,
-  createTextMessageApi,
-  createMediaMessagesApi,
+  fetchConversations,
+  fetchMessages,
+  createTextMessage,
+  createMediaMessages,
   type ConversationResponse,
   type MessageResponse,
 } from "../helpers/chatApi";
 import { DEFAULT_AVATAR } from "../constants/common";
-import { FileText } from "lucide-react";
+import { FileText, Paperclip, Send } from "lucide-react";
 
 interface ChatViewProps {
   userId: string;
@@ -19,6 +19,15 @@ interface ChatViewProps {
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
 const MAX_TOTAL_SIZE = 100 * 1024 * 1024; // 100MB
 const PAGE_SIZE = 20;
+
+function isValidUrl(str: string): boolean {
+  try {
+    new URL(str);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export default function ChatView({ userId, userName, userAvatar }: ChatViewProps) {
   const [conversations, setConversations] = useState<ConversationResponse[]>([]);
@@ -39,7 +48,7 @@ export default function ChatView({ userId, userName, userAvatar }: ChatViewProps
     if (!userId) return;
     const load = async () => {
       try {
-        const data = await fetchConversationsApi(userId);
+        const data = await fetchConversations(userId);
         setConversations(data);
       } catch (err) {
         console.error("Failed to fetch conversations:", err);
@@ -54,7 +63,7 @@ export default function ChatView({ userId, userName, userAvatar }: ChatViewProps
     const load = async () => {
       setLoading(true);
       try {
-        const data = await fetchMessagesApi(selectedConversation, 0, PAGE_SIZE);
+        const data = await fetchMessages(selectedConversation, 0, PAGE_SIZE);
         setMessages(data.reverse()); // newest at bottom
         setPage(1);
         setHasMore(data.length === PAGE_SIZE);
@@ -85,7 +94,7 @@ export default function ChatView({ userId, userName, userAvatar }: ChatViewProps
     if (target.scrollTop === 0 && hasMore && !loading) {
       setLoading(true);
       try {
-        const more = await fetchMessagesApi(selectedConversation!, page, PAGE_SIZE);
+        const more = await fetchMessages(selectedConversation!, page, PAGE_SIZE);
         setMessages((prev) => [...more.reverse(), ...prev]);
         setPage((prev) => prev + 1);
         setHasMore(more.length === PAGE_SIZE);
@@ -107,12 +116,14 @@ export default function ChatView({ userId, userName, userAvatar }: ChatViewProps
     if ((!newMessage.trim() && pendingFiles.length === 0) || !selectedConversation) return;
     try {
       if (newMessage.trim()) {
-        const msg = await createTextMessageApi({
+        const isLink = isValidUrl(newMessage.trim());
+        const msg = await createTextMessage({
           conversationId: selectedConversation,
           senderId: userId,
           senderFullName: userName,
           senderImageUrl: userAvatar,
-          content: newMessage,
+          content: newMessage.trim(),
+          type: isLink ? "link" : "text",
         });
         setMessages((prev) => [...prev, msg]);
         setNewMessage("");
@@ -140,7 +151,7 @@ export default function ChatView({ userId, userName, userAvatar }: ChatViewProps
 
         if (valid.length > 0) {
           try {
-            const msgs = await createMediaMessagesApi(
+            const msgs = await createMediaMessages(
               selectedConversation,
               userId,
               userName,
@@ -225,6 +236,46 @@ export default function ChatView({ userId, userName, userAvatar }: ChatViewProps
   // render message content
   const renderContent = (m: MessageResponse) => {
     if (m.type === "text") return <div>{m.content}</div>;
+    if (m.type === "link") {
+      try {
+        const meta = JSON.parse(m.content);
+
+        return (
+          <a
+            href={meta.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex flex-col max-w-xs rounded-2xl overflow-hidden cursor-pointer border shadow-sm bg-gray-50 hover:bg-gray-100 transition"
+          >
+            {meta.image && (
+              <img src={meta.image} alt="" className="w-full max-h-48 object-cover" />
+            )}
+            <div className="px-3 py-2">
+              {meta.title && (
+                <div className="font-semibold text-sm text-gray-900">{meta.title}</div>
+              )}
+              {meta.description && (
+                <div className="text-xs text-gray-600 line-clamp-2">{meta.description}</div>
+              )}
+              <div className="text-xs text-blue-600 underline mt-1 break-words">
+                {meta.url}
+              </div>
+            </div>
+          </a>
+        );
+      } catch {
+        return (
+          <a
+            href={m.content}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-blue-600 underline bg-gray-50 px-3 py-2 rounded-2xl inline-block"
+          >
+            {m.content}
+          </a>
+        );
+      }
+    }
     if (m.type === "media") {
       try {
         const { url, mediaType, originalName } = JSON.parse(m.content);
@@ -254,6 +305,28 @@ export default function ChatView({ userId, userName, userAvatar }: ChatViewProps
       }
     }
     return <div>{m.content}</div>;
+  };
+
+  // helper for last message preview
+  const getLastMessagePreview = (c: ConversationResponse) => {
+    if (!c.lastMessage) return "No messages yet";
+
+    const { type, sender, content } = c.lastMessage;
+
+    if (type === "text") return content;
+    if (type === "link") return `${sender.fullName} have send a link`;
+    if (type === "media") {
+      try {
+        const parsed = JSON.parse(content);
+        if (parsed.mediaType === "image") return `${sender.fullName} have send an image`;
+        if (parsed.mediaType === "audio") return `${sender.fullName} have send an audio`;
+        if (parsed.mediaType === "file") return `${sender.fullName} have send a file`;
+        return `${sender.fullName} have send a media`;
+      } catch {
+        return `${sender.fullName} have send a media`;
+      }
+    }
+    return `${sender.fullName} have send a message`;
   };
 
   if (!userId) {
@@ -300,7 +373,7 @@ export default function ChatView({ userId, userName, userAvatar }: ChatViewProps
               <div className="flex-1">
                 <div className="font-medium">{displayName}</div>
                 <div className="text-sm text-gray-500 truncate">
-                  {c.lastMessage?.content || "No messages yet"}
+                  {getLastMessagePreview(c)}
                 </div>
               </div>
             </div>
@@ -326,7 +399,10 @@ export default function ChatView({ userId, userName, userAvatar }: ChatViewProps
                 const image = isImageMessage(m);
 
                 return (
-                  <div key={m.id} className={`flex ${isOwn ? "justify-end" : "justify-start"} mb-0.5`}>
+                  <div
+                    key={m.id}
+                    className={`flex ${isOwn ? "justify-end" : "justify-start"} mb-0.5`}
+                  >
                     {!isOwn && (
                       <div className="flex items-end gap-2">
                         {isLastInGroup ? (
@@ -341,27 +417,59 @@ export default function ChatView({ userId, userName, userAvatar }: ChatViewProps
                         ) : (
                           <div className="w-8" />
                         )}
+
                         <div className="flex flex-col items-start">
                           {isFirstInGroup && (
                             <span className="text-xs text-gray-500 mb-1">
                               {m.sender.fullName}
                             </span>
                           )}
-                          <div
-                            className={`${image ? "" : "bg-gray-200 text-gray-900 rounded-2xl px-4 py-2"} max-w-xs break-words`}
-                          >
-                            {renderContent(m)}
-                          </div>
+                          {m.type === "link" ? (
+                            renderContent(m)
+                          ) : (
+                            <div
+                              className={`${
+                                image
+                                  ? ""
+                                  : "bg-gray-100 rounded-2xl px-3 py-2 max-w-xs whitespace-pre-wrap break-words"
+                              }`}
+                            >
+                              {renderContent(m)}
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}
+
                     {isOwn && (
-                      <div className="flex flex-col items-end">
-                        <div
-                          className={`${image ? "" : "bg-blue-500 text-white rounded-2xl px-4 py-2"} max-w-xs break-words`}
-                        >
-                          {renderContent(m)}
+                      <div className="flex items-end gap-2">
+                        <div className="flex flex-col items-end">
+                          {m.type === "link" ? (
+                            renderContent(m)
+                          ) : (
+                            <div
+                              className={`${
+                                image
+                                  ? ""
+                                  : "bg-blue-500 text-white rounded-2xl px-3 py-2 max-w-xs whitespace-pre-wrap break-words"
+                              }`}
+                            >
+                              {renderContent(m)}
+                            </div>
+                          )}
                         </div>
+                        {isLastInGroup ? (
+                          <img
+                            src={userAvatar || DEFAULT_AVATAR}
+                            alt={userName}
+                            className="w-8 h-8 rounded-full"
+                            onError={(e) =>
+                              ((e.currentTarget as HTMLImageElement).src = DEFAULT_AVATAR)
+                            }
+                          />
+                        ) : (
+                          <div className="w-8" />
+                        )}
                       </div>
                     )}
                   </div>
@@ -371,43 +479,39 @@ export default function ChatView({ userId, userName, userAvatar }: ChatViewProps
             </div>
 
             {pendingFiles.length > 0 && renderPendingFiles()}
-            {errorMsg && <div className="px-3 py-1 text-red-500 text-sm">{errorMsg}</div>}
 
-            <div className="flex items-center gap-2 p-3 border-t">
+            {errorMsg && <div className="p-2 text-sm text-red-600">{errorMsg}</div>}
+
+            {/* Input */}
+            <div className="p-3 border-t flex items-center gap-2">
+              <label className="cursor-pointer">
+                <Paperclip className="w-6 h-6 text-gray-500" />
+                <input
+                  type="file"
+                  multiple
+                  className="hidden"
+                  onChange={(e) => handleSelectFiles(e.target.files)}
+                />
+              </label>
               <input
                 type="text"
+                className="flex-1 border rounded-2xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="Type a message..."
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
-                placeholder="Type a message..."
-                className="flex-1 border rounded-full px-4 py-2 outline-none"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") {
-                    e.preventDefault();
-                    handleSendMessage();
-                  }
-                }}
+                onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
               />
-              <input
-                type="file"
-                multiple
-                className="hidden"
-                id="fileInput"
-                onChange={(e) => handleSelectFiles(e.target.files)}
-              />
-              <label htmlFor="fileInput" className="cursor-pointer px-3 py-2 text-gray-600 hover:text-gray-900">
-                📎
-              </label>
               <button
                 onClick={handleSendMessage}
-                className="bg-blue-500 text-white px-4 py-2 rounded-full"
+                className="bg-blue-500 text-white rounded-full p-2 hover:bg-blue-600"
               >
-                Send
+                <Send className="w-5 h-5" />
               </button>
             </div>
           </>
         ) : (
-          <div className="flex-1 flex items-center justify-center text-gray-500 text-2xl font-semibold">
-            Welcome to JoFox
+          <div className="flex flex-1 items-center justify-center text-gray-500">
+            Select a conversation
           </div>
         )}
       </main>

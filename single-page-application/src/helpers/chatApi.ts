@@ -5,19 +5,27 @@ export interface MemberResponse {
   userId: string;
   fullName: string;
   imageUrl: string;
-  role: string; // "admin" | "member"
+  role: string | null; // "admin" | "member" | null
+  joinedAt?: string | null;
 }
 
 export interface LastMessageResponse {
   messageId: string;
+  sender: {
+    userId: string;
+    fullName: string;
+    imageUrl?: string;
+    role?: string | null;
+    joinedAt?: string | null;
+  };
+  type: "text" | "link" | "media";
   content: string;
-  senderId: string;
-  sentAt: string;
+  createdAt: string;
 }
 
 export interface ConversationResponse {
   id: string;
-  type: string;
+  type: "private" | "group";
   name: string | null;
   members: MemberResponse[];
   imageUrl: string | null;
@@ -30,7 +38,7 @@ export interface MessageResponse {
   id: string;
   conversationId: string;
   sender: MemberResponse;
-  type: string; // "text" | "media"
+  type: "text" | "link" | "media";
   content: string; // với media là JSON string chứa metadata
   createdAt: string;
 }
@@ -41,12 +49,13 @@ export interface MessageCreateRequest {
   senderFullName: string;
   senderImageUrl: string;
   content: string;
+  type: "text" | "link";
 }
 
 // --- APIs ---
 
 // Lấy danh sách conversations
-export async function fetchConversationsApi(
+export async function fetchConversations(
   userId: string
 ): Promise<ConversationResponse[]> {
   const res = await api.get(`/chat/conversations/user/${userId}`);
@@ -54,7 +63,7 @@ export async function fetchConversationsApi(
 }
 
 // Lấy messages theo conversationId
-export async function fetchMessagesApi(
+export async function fetchMessages(
   conversationId: string,
   page = 0,
   size = 20
@@ -66,7 +75,7 @@ export async function fetchMessagesApi(
 }
 
 // Tạo message text
-export async function createTextMessageApi(
+export async function createTextMessage(
   req: MessageCreateRequest
 ): Promise<MessageResponse> {
   const res = await api.post("/chat/messages", req);
@@ -74,7 +83,7 @@ export async function createTextMessageApi(
 }
 
 // Tạo message media (nhiều file)
-export async function createMediaMessagesApi(
+export async function createMediaMessages(
   conversationId: string,
   senderId: string,
   senderFullName: string,

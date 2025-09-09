@@ -2,6 +2,7 @@ package greenwich.chatapp.chatservice.service.impl;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import greenwich.chatapp.chatservice.dto.request.MessageCreateRequest;
+import greenwich.chatapp.chatservice.dto.response.LinkPreviewResponse;
 import greenwich.chatapp.chatservice.dto.response.MediaMetadataResponse;
 import greenwich.chatapp.chatservice.dto.response.MessageResponse;
 import greenwich.chatapp.chatservice.entity.ConversationEntity;
@@ -11,6 +12,7 @@ import greenwich.chatapp.chatservice.entity.MessageEntity;
 import greenwich.chatapp.chatservice.feignclient.MediaServiceClient;
 import greenwich.chatapp.chatservice.repository.ConversationRepository;
 import greenwich.chatapp.chatservice.repository.MessageRepository;
+import greenwich.chatapp.chatservice.service.LinkPreviewService;
 import greenwich.chatapp.chatservice.service.MessageService;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
@@ -32,6 +34,7 @@ public class MessageServiceImpl implements MessageService {
     private final MediaServiceClient mediaServiceClient;
     private final MessageRepository messageRepository;
     private final ConversationRepository conversationRepository;
+    private final LinkPreviewService linkPreviewService;
     private final ModelMapper modelMapper;
 
     @Override
@@ -42,17 +45,37 @@ public class MessageServiceImpl implements MessageService {
                 .imageUrl(request.getSenderImageUrl())
                 .build();
 
+        String type = (request.getType() != null) ? request.getType() : "text";
+        String content = request.getContent();
+
+        // Nếu message là link -> fetch metadata và lưu JSON string
+        if ("link".equalsIgnoreCase(type)) {
+            LinkPreviewResponse meta = linkPreviewService.fetchMetadata(content);
+            try {
+                content = new ObjectMapper().writeValueAsString(meta);
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to serialize link metadata", e);
+            }
+        }
+
         MessageEntity message = MessageEntity.builder()
                 .conversationId(request.getConversationId())
                 .sender(sender)
-                .type("text")
-                .content(request.getContent())
+                .type(type)
+                .content(content)
                 .createdAt(LocalDateTime.now())
                 .build();
 
         MessageEntity savedMessage = messageRepository.save(message);
 
-        updateLastMessage(request.getConversationId(), sender, savedMessage.getType(), savedMessage.getContent(), savedMessage.getId(), savedMessage.getCreatedAt());
+        updateLastMessage(
+                request.getConversationId(),
+                sender,
+                type,
+                content,
+                savedMessage.getId(),
+                savedMessage.getCreatedAt()
+        );
 
         return ResponseEntity.ok(modelMapper.map(savedMessage, MessageResponse.class));
     }

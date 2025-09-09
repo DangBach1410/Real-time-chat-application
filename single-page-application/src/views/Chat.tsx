@@ -5,7 +5,7 @@ import ChatView from "../components/ChatView";
 import SearchResult from "../components/SearchResult";
 import Profile from "../components/Profile";
 import FriendRequests from "../components/FriendRequests"; //
-import { fetchUserByIdApi } from "../helpers/userApi";
+import { fetchUserById } from "../helpers/userApi";
 import type { UserResponse } from "../helpers/userApi";
 
 function isTokenExpired(token: string): boolean {
@@ -37,7 +37,7 @@ export default function Chat() {
 
     const fetchUser = async () => {
       try {
-        const data = await fetchUserByIdApi(userId);
+        const data = await fetchUserById(userId);
         setUser(data);
       } catch (err) {
         console.error("Failed to fetch user", err);
