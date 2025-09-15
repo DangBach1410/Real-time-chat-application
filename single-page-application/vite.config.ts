@@ -7,4 +7,7 @@ export default defineConfig({
   server: {
     port: 4000,
   },
+  define: {
+    global: 'window', // <-- fix "global is not defined" cho sockjs-client
+  },
 })

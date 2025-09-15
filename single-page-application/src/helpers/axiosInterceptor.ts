@@ -44,7 +44,12 @@ api.interceptors.response.use(
 
         const res = await axios.post(
           'http://localhost:8762/api/v1/auth/refresh-token',
-          { refreshToken }
+          {},
+          {
+            headers: {
+              Authorization: `Bearer ${refreshToken}`,
+            },
+          }
         );
 
         const { accessToken: newAccessToken, refreshToken: newRefreshToken } = res.data as { 

@@ -16,6 +16,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 import greenwich.chatapp.authservice.service.JwtService;
 
 import java.io.IOException;
+import java.util.Arrays;
 
 @Component
 @RequiredArgsConstructor
@@ -24,6 +25,18 @@ public class JwtFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
     private final UserDetailsService userDetailsService;
+
+    // Các endpoint sẽ bỏ qua filter
+    private static final String[] EXCLUDE_URLS = {
+            "/api/v1/auth/verify-token",
+            "/api/v1/auth/refresh-token"
+    };
+
+    @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) throws ServletException {
+        String path = request.getServletPath();
+        return Arrays.stream(EXCLUDE_URLS).anyMatch(path::startsWith);
+    }
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)

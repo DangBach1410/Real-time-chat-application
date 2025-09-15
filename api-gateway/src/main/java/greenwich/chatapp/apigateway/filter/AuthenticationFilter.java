@@ -8,6 +8,7 @@ import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
@@ -29,11 +30,20 @@ public class AuthenticationFilter implements GatewayFilter {
             throw new ValidationException(HttpStatus.UNAUTHORIZED, "Authorization header is missing");
         }
 
-        VerifyTokenResponse verifyTokenResponse = restClient.get()
-                .uri("http://auth-service:8082/api/v1/auth/verify-token")
-                .header("Authorization", authHeader)
-                .retrieve()
-                .body(new ParameterizedTypeReference<>() {});
+        VerifyTokenResponse verifyTokenResponse;
+        try {
+            verifyTokenResponse = restClient.get()
+                    .uri("http://auth-service:8082/api/v1/auth/verify-token")
+                    .header("Authorization", authHeader)
+                    .retrieve()
+                    .body(new ParameterizedTypeReference<>() {});
+        } catch (HttpClientErrorException e) {
+            if (e.getStatusCode() == HttpStatus.UNAUTHORIZED) {
+                log.error("Auth service rejected token: {}", e.getResponseBodyAsString());
+                throw new ValidationException(HttpStatus.UNAUTHORIZED, "Invalid token");
+            }
+            throw e;
+        }
 
         if (verifyTokenResponse == null) {
             log.error("Response from auth service is null");

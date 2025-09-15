@@ -26,7 +26,7 @@ export default function Chat() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    const token = localStorage.getItem("accessToken");
+    const token = localStorage.getItem("refreshToken");
     const userId = localStorage.getItem("userId");
 
     if (!token || isTokenExpired(token) || !userId) {

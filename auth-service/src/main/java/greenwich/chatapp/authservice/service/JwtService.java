@@ -81,17 +81,22 @@ public class JwtService {
     }
 
     public boolean validateToken(String token) {
-        if (isTokenExpired(token)) {
+        try {
+            if (isTokenExpired(token)) {
+                return false;
+            }
+
+            String username = extractUsername(token);
+            if (!StringUtils.hasText(username)) {
+                return false;
+            }
+
+            Optional<UserEntity> userEntity = userRepository.findByUsername(username);
+            return userEntity.isPresent();
+        } catch (io.jsonwebtoken.JwtException e) {
+            // Token không hợp lệ (signature sai, malformed, unsupported, ...)
             return false;
         }
-
-        String username = extractUsername(token);
-        if (!StringUtils.hasText(username)) {
-            return false;
-        }
-
-        Optional<UserEntity> userEntity = userRepository.findByUsername(username);
-        return userEntity.isPresent();
     }
 }
 

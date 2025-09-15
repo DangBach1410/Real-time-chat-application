@@ -13,6 +13,19 @@ services:
     networks:
       - chatapp-network
 
+  redis:
+    build:
+      context: ./redis
+      dockerfile: Dockerfile
+    container_name: redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./redis/redis_data:/data
+    networks:
+      - chatapp-network
+
   minio:
     build:
       context: ./minio
@@ -117,6 +130,23 @@ services:
     restart: unless-stopped
     networks:
       - chatapp-network
+
+  presence-service:
+    build:
+      context: ./presence-service
+      dockerfile: Dockerfile
+    container_name: presence-service
+    ports:
+      - "${PRESENCE_SERVICE_PORT}:8085"
+    depends_on:
+      - redis
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+    restart: unless-stopped
+    networks:
+      - chatapp-network
+
 
 networks:
   chatapp-network:

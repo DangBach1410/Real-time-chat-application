@@ -19,6 +19,7 @@ import org.modelmapper.ModelMapper;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -36,6 +37,7 @@ public class MessageServiceImpl implements MessageService {
     private final ConversationRepository conversationRepository;
     private final LinkPreviewService linkPreviewService;
     private final ModelMapper modelMapper;
+    private final SimpMessagingTemplate messagingTemplate;
 
     @Override
     public ResponseEntity<MessageResponse> createMessage(MessageCreateRequest request) {
@@ -77,7 +79,15 @@ public class MessageServiceImpl implements MessageService {
                 savedMessage.getCreatedAt()
         );
 
-        return ResponseEntity.ok(modelMapper.map(savedMessage, MessageResponse.class));
+        MessageResponse response = modelMapper.map(savedMessage, MessageResponse.class);
+
+        // Broadcast cho tất cả client đã subscribe conversation
+        messagingTemplate.convertAndSend(
+                "/topic/conversations/" + request.getConversationId(),
+                response
+        );
+
+        return ResponseEntity.ok(response);
     }
 
     @Override
@@ -124,13 +134,22 @@ public class MessageServiceImpl implements MessageService {
                     .build();
 
             MessageEntity savedMessage = messageRepository.save(message);
-            responses.add(modelMapper.map(savedMessage, MessageResponse.class));
+            MessageResponse response = modelMapper.map(savedMessage, MessageResponse.class);
+
+            responses.add(response);
 
             // Cập nhật lastMessage = file cuối cùng
             updateLastMessage(conversationId, sender, "media", metadataJson, savedMessage.getId(), savedMessage.getCreatedAt());
+
+            // Broadcast mỗi file gửi
+            messagingTemplate.convertAndSend(
+                    "/topic/conversations/" + conversationId,
+                    response
+            );
         }
         return ResponseEntity.ok(responses);
     }
+
     private void updateLastMessage(String conversationId, MemberEntity sender, String type, String content, String messageId, LocalDateTime createdAt) {
         ConversationEntity conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new RuntimeException("Conversation not found"));
