@@ -12,7 +12,12 @@ import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.mongodb.core.MongoTemplate;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.http.ResponseEntity;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
@@ -26,6 +31,37 @@ public class ConversationServiceImpl implements ConversationService {
 
     private final ConversationRepository conversationRepository;
     private final ModelMapper modelMapper;
+    private final MongoTemplate mongoTemplate;
+
+    @Override
+    @Async("taskExecutor")
+    public void updateMemberInfoInConversations(String userId, String fullName, String imageUrl) {
+        Query query = new Query(Criteria.where("members.userId").is(userId));
+        Update update = new Update()
+                .set("members.$[m].fullName", fullName)
+                .set("members.$[m].imageUrl", imageUrl)
+                .filterArray(Criteria.where("m.userId").is(userId));
+
+        mongoTemplate.updateMulti(query, update, ConversationEntity.class);
+
+        // 2. Update lastMessage.sender bằng batch Java
+        List<ConversationEntity> conversations = mongoTemplate.find(query, ConversationEntity.class);
+
+        for (ConversationEntity conversation : conversations) {
+            boolean modified = false;
+
+            if (conversation.getLastMessage() != null &&
+                    userId.equals(conversation.getLastMessage().getSender().getUserId())) {
+                conversation.getLastMessage().getSender().setFullName(fullName);
+                conversation.getLastMessage().getSender().setImageUrl(imageUrl);
+                modified = true;
+            }
+
+            if (modified) {
+                mongoTemplate.save(conversation);
+            }
+        }
+    }
 
     @Override
     public ResponseEntity<ConversationResponse> createConversation(ConversationCreateRequest request) {

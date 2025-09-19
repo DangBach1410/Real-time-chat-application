@@ -28,3 +28,46 @@ export interface LoginResponse {
 export const login = (data: LoginRequest) => {
   return api.post<LoginResponse>('/auth/login', data);
 };
+
+export interface ChangePasswordRequest {
+  oldPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}
+
+export const changePassword = (userId: string, data: ChangePasswordRequest) => {
+  return api.put<UserResponse>(`/auth/users/${userId}/change-password`, data);
+};
+
+export interface UpdateRequest {
+  firstName: string;
+  lastName: string;
+  email: string;
+}
+
+export interface UserResponse {
+  status: number;
+  message: string;
+  fullName?: string;
+  email?: string;
+  imageUrl?: string;
+}
+
+export const updateUser = (userId: string, data: UpdateRequest) => {
+  return api.put<UserResponse>(`/auth/users/${userId}`, data);
+};
+
+export const updateUserImage = (userId: string, file: File) => {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  return api.put<UserResponse>(
+    `/auth/users/${userId}/update-image`,
+    formData,
+    {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    }
+  );
+};

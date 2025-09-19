@@ -18,6 +18,14 @@ public class MessageController {
 
     private final MessageService messageService;
 
+    @PutMapping()
+    public void updateMessages(
+            @RequestParam String userId,
+            @RequestParam String fullName,
+            @RequestParam String imageUrl) {
+        messageService.updateSenderInfoInMessages(userId, fullName, imageUrl);
+    }
+
     @PostMapping
     public ResponseEntity<MessageResponse> createMessage(@RequestBody MessageCreateRequest request) {
         return messageService.createMessage(request);

@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Outlet, useNavigate } from "react-router-dom";
 import Navbar from "../components/Navbar";
-import ChatView from "../components/ChatView";
 import { fetchUserById } from "../helpers/userApi";
 import type { UserResponse } from "../helpers/userApi";
 
@@ -15,8 +14,9 @@ function isTokenExpired(token: string): boolean {
   }
 }
 
-export default function Chat() {
+export default function ChatLayout() {
   const [user, setUser] = useState<UserResponse | null>(null);
+  const [keyword, setKeyword] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
 
@@ -61,15 +61,13 @@ export default function Chat() {
   return (
     <div className="h-screen flex flex-col">
       <Navbar
-        onSearch={() => {}} // Search xử lý qua Navbar → navigate("/search")
+        onSearch={(kw) => setKeyword(kw)}
         fullName={user.fullName}
         imageUrl={user.imageUrl}
       />
-      <ChatView
-        userId={currentUserId}
-        userName={user.fullName}
-        userAvatar={user.imageUrl}
-      />
+
+      {/* Truyền props xuống các route con */}
+      <Outlet context={{ user, keyword, currentUserId }} />
     </div>
   );
 }

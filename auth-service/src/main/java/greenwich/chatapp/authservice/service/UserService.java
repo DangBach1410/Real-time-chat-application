@@ -1,22 +1,30 @@
 package greenwich.chatapp.authservice.service;
 
+import greenwich.chatapp.authservice.dto.request.ChangePasswordRequest;
 import greenwich.chatapp.authservice.dto.request.ConversationCreateRequest;
 import greenwich.chatapp.authservice.dto.request.UpdateRequest;
 import greenwich.chatapp.authservice.dto.response.*;
 import greenwich.chatapp.authservice.feignclient.ChatServiceClient;
+import greenwich.chatapp.authservice.feignclient.MediaServiceClient;
 import greenwich.chatapp.authservice.util.UnicodeUtils;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.http.HttpStatus;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import greenwich.chatapp.authservice.dto.request.RegisterRequest;
 import greenwich.chatapp.authservice.entity.UserEntity;
 import greenwich.chatapp.authservice.enums.Role;
 import greenwich.chatapp.authservice.repository.UserRepository;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Update;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -27,9 +35,12 @@ import java.util.stream.Collectors;
 @Service
 @RequiredArgsConstructor
 public class UserService {
+    private static final String USER_NOT_FOUND = "User not found";
     private final UserRepository userRepository;
     private final ChatServiceClient chatServiceClient;
+    private final MediaServiceClient mediaServiceClient;
     private final PasswordEncoder passwordEncoder;
+    private final FriendAsyncService friendAsyncService;
 
     @Value("${default.avatar.url}")
     String defaultAvatarUrl;
@@ -80,7 +91,7 @@ public class UserService {
         if (userEntity.isEmpty()) {
             return UserResponse.builder()
                     .status(HttpStatus.NOT_FOUND.value())
-                    .message("User not found")
+                    .message(USER_NOT_FOUND)
                     .build();
         }
 
@@ -88,42 +99,53 @@ public class UserService {
         return UserResponse.builder()
                 .status(HttpStatus.OK.value())
                 .message("User found")
+                .firstName(user.getFirstName())
+                .lastName(user.getLastName())
                 .fullName(user.getFullName())
                 .email(user.getEmail())
                 .imageUrl(user.getImageUrl())
                 .build();
     }
 
-    public UserResponse updateUser(String id, @Valid UpdateRequest request) {
-        Optional<UserEntity> userEntity = userRepository.findById(id);
+        public UserResponse updateUser(String id, @Valid UpdateRequest request) {
+            Optional<UserEntity> userEntity = userRepository.findById(id);
 
-        if (userEntity.isEmpty()) {
+            if (userEntity.isEmpty()) {
+                return UserResponse.builder()
+                        .status(HttpStatus.NOT_FOUND.value())
+                        .message(USER_NOT_FOUND)
+                        .build();
+            }
+
+            Optional<UserEntity> userEntityByEmail = userRepository.findByEmail(request.getEmail());
+            if (userEntityByEmail.isPresent() && !userEntityByEmail.get().getId().equals(id)) {
+                return UserResponse.builder()
+                        .status(HttpStatus.BAD_REQUEST.value())
+                        .message("Email is already in use")
+                        .build();
+            }
+
+            UserEntity user = userEntity.get();
+            String fullName = request.getFirstName() + " " + request.getLastName();
+
+            user.setFirstName(request.getFirstName());
+            user.setLastName(request.getLastName());
+            user.setFullName(fullName);
+            user.setEmail(request.getEmail());
+            user.setSearchFullName(UnicodeUtils.toSearchable(fullName));
+
+            userRepository.save(user);
+            friendAsyncService.updateFriendsAndRequestsInBackground(id, fullName, user.getImageUrl());
+            chatServiceClient.updateConversations(id, fullName, user.getImageUrl());
+            chatServiceClient.updateMessages(id, fullName, user.getImageUrl());
+
             return UserResponse.builder()
-                    .status(HttpStatus.NOT_FOUND.value())
-                    .message("User not found")
+                    .status(HttpStatus.OK.value())
+                    .message("User updated successfully")
+                    .fullName(user.getFullName())
+                    .email(user.getEmail())
                     .build();
         }
-
-        UserEntity user = userEntity.get();
-        String fullName = request.getFirstName() + " " + request.getLastName();
-
-        user.setFirstName(request.getFirstName());
-        user.setLastName(request.getLastName());
-        user.setFullName(fullName);
-        user.setEmail(request.getEmail());
-        user.setImageUrl(request.getImageUrl());
-        user.setSearchFullName(UnicodeUtils.toSearchable(fullName));
-
-        userRepository.save(user);
-
-        return UserResponse.builder()
-                .status(HttpStatus.OK.value())
-                .message("User updated successfully")
-                .fullName(user.getFullName())
-                .email(user.getEmail())
-                .imageUrl(user.getImageUrl())
-                .build();
-    }
 
     public FriendRequestResponse sendFriendRequest(String senderId, String receiverId) {
         Optional<UserEntity> senderOpt = userRepository.findById(senderId);
@@ -266,7 +288,7 @@ public class UserService {
 
     public List<GetFriendResponse> getFriends(String userId) {
         UserEntity user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new RuntimeException(USER_NOT_FOUND));
 
         return user.getFriends().stream()
                 .map(f -> new GetFriendResponse(
@@ -280,7 +302,7 @@ public class UserService {
 
     public List<GetFriendRequestResponse> getFriendRequests(String userId) {
         UserEntity user = userRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("User not found"));
+                .orElseThrow(() -> new RuntimeException(USER_NOT_FOUND));
 
         return user.getFriendRequests().stream()
                 .map(fr -> new GetFriendRequestResponse(
@@ -372,5 +394,73 @@ public class UserService {
 
         combined.addAll(userMatches);
         return combined;
+    }
+
+    public UserResponse changePassword(String id, @Valid ChangePasswordRequest request) {
+        Optional<UserEntity> userEntity = userRepository.findById(id);
+
+        if (userEntity.isEmpty()) {
+            return UserResponse.builder()
+                    .status(HttpStatus.NOT_FOUND.value())
+                    .message(USER_NOT_FOUND)
+                    .build();
+        }
+
+        UserEntity user = userEntity.get();
+
+        if (!passwordEncoder.matches(request.getOldPassword(), user.getPassword())) {
+            return UserResponse.builder()
+                    .status(HttpStatus.BAD_REQUEST.value())
+                    .message("Old password is incorrect")
+                    .build();
+        }
+
+        if (!request.getNewPassword().equals(request.getConfirmPassword())) {
+            return UserResponse.builder()
+                    .status(HttpStatus.BAD_REQUEST.value())
+                    .message("New password and confirm password do not match")
+                    .build();
+        }
+
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+        userRepository.save(user);
+
+        return UserResponse.builder()
+                .status(HttpStatus.OK.value())
+                .message("Password changed successfully")
+                .build();
+    }
+
+    public UserResponse updateImage(String id, MultipartFile file) {
+        Optional<UserEntity> userEntity = userRepository.findById(id);
+
+        if (userEntity.isEmpty()) {
+            return UserResponse.builder()
+                    .status(HttpStatus.NOT_FOUND.value())
+                    .message(USER_NOT_FOUND)
+                    .build();
+        }
+
+        UserEntity user = userEntity.get();
+
+        String imageUrl = mediaServiceClient.uploadFiles(List.of(file)).get(0).getUrl();
+        if (imageUrl == null) {
+            return UserResponse.builder()
+                    .status(HttpStatus.INTERNAL_SERVER_ERROR.value())
+                    .message("Failed to upload image")
+                    .build();
+        }
+
+        user.setImageUrl(imageUrl);
+        userRepository.save(user);
+        friendAsyncService.updateFriendsAndRequestsInBackground(id, user.getFullName(), imageUrl);
+        chatServiceClient.updateConversations(id, user.getFullName(), imageUrl);
+        chatServiceClient.updateMessages(id, user.getFullName(), imageUrl);
+
+        return UserResponse.builder()
+                .status(HttpStatus.OK.value())
+                .message("Image updated successfully")
+                .imageUrl(imageUrl)
+                .build();
     }
 }

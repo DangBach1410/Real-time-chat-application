@@ -17,6 +17,14 @@ public class ConversationController {
 
     private final ConversationService conversationService;
 
+    @PutMapping
+    public void updateConversations(
+            @RequestParam String userId,
+            @RequestParam String fullName,
+            @RequestParam String imageUrl) {
+        conversationService.updateMemberInfoInConversations(userId, fullName, imageUrl);
+    }
+
     @PostMapping
     public ResponseEntity<ConversationResponse> createConversation(@RequestBody ConversationCreateRequest request) {
         return conversationService.createConversation(request);

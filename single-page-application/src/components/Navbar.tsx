@@ -1,17 +1,18 @@
 import { useState, useRef, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { DEFAULT_AVATAR } from "../constants/common";
 
 interface NavbarProps {
-  onSearch: (keyword: string) => void; 
-  onNavigate: (view: "chat" | "search" | "profile" | "friendRequests") => void;
+  onSearch: (keyword: string) => void;
   fullName: string;
   imageUrl?: string;
 }
 
-export default function Navbar({ onSearch, onNavigate, fullName, imageUrl }: NavbarProps) {
+export default function Navbar({ onSearch, fullName, imageUrl }: NavbarProps) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const avatarRef = useRef<HTMLDivElement>(null);
   const [searchValue, setSearchValue] = useState("");
+  const navigate = useNavigate();
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -31,8 +32,8 @@ export default function Navbar({ onSearch, onNavigate, fullName, imageUrl }: Nav
 
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "Enter" && searchValue.trim()) {
-      onSearch(searchValue.trim()); // ⬅️ chỉ truyền keyword
-      onNavigate("search"); // chuyển sang view search
+      onSearch(searchValue.trim());
+      navigate("/search");
     }
   };
 
@@ -41,7 +42,7 @@ export default function Navbar({ onSearch, onNavigate, fullName, imageUrl }: Nav
       {/* Logo */}
       <div
         className="cursor-pointer flex items-center"
-        onClick={() => onNavigate("chat")}
+        onClick={() => navigate("/chat")}
       >
         <img
           src="http://localhost:9000/chat-media/JoChat.svg"
@@ -71,7 +72,6 @@ export default function Navbar({ onSearch, onNavigate, fullName, imageUrl }: Nav
           referrerPolicy="no-referrer"
           onClick={() => setDropdownOpen(!dropdownOpen)}
         />
-        {/* Dropdown Icon */}
         <button
           className="absolute bottom-0 right-0 bg-white rounded-full p-0.5 shadow cursor-pointer"
           style={{ transform: "translate(0%, 0%)" }}
@@ -92,10 +92,11 @@ export default function Navbar({ onSearch, onNavigate, fullName, imageUrl }: Nav
 
         {dropdownOpen && (
           <div className="absolute right-0 mt-2 w-56 bg-white border rounded-md shadow-lg overflow-hidden">
+            {/* Profile */}
             <button
               className="w-full px-4 py-3 flex items-center gap-3 hover:bg-gray-100"
               onClick={() => {
-                onNavigate("profile");
+                navigate("/profile");
                 setDropdownOpen(false);
               }}
             >
@@ -107,16 +108,17 @@ export default function Navbar({ onSearch, onNavigate, fullName, imageUrl }: Nav
               />
               <p className="font-medium text-gray-800 truncate">{fullName}</p>
             </button>
+
             <div className="border-t-2 border-gray-700 w-48 mx-auto my-1"></div>
-            {/* Friend Requests button */}
+
+            {/* Friend Requests */}
             <button
               className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center gap-2"
               onClick={() => {
-                onNavigate("friendRequests");
+                navigate("/profile/friend-requests");
                 setDropdownOpen(false);
               }}
             >
-              {/* Icon (user group) */}
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 className="h-5 w-5 text-blue-600"
@@ -133,11 +135,13 @@ export default function Navbar({ onSearch, onNavigate, fullName, imageUrl }: Nav
               </svg>
               Friend Requests
             </button>
+
+            {/* Logout */}
             <button
               className="w-full text-left px-4 py-2 hover:bg-gray-100 flex items-center gap-2"
               onClick={() => {
                 localStorage.clear();
-                window.location.href = "/login";
+                navigate("/login");
                 setDropdownOpen(false);
               }}
             >

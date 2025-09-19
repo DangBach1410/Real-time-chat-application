@@ -8,5 +8,4 @@ public class UpdateRequest {
     private String lastName;
     private String fullName;
     private String email;
-    private String imageUrl;
 }

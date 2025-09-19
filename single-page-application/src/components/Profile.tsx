@@ -1,17 +1,20 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { getFriends, unfriend, type GetFriendResponse } from "../helpers/friendApi";
-import { UserMinusIcon } from "@heroicons/react/24/solid";
+import { updateUserImage } from "../helpers/authApi"; // ✅ api update ảnh
+import { UserMinusIcon, CameraIcon } from "@heroicons/react/24/solid"; // ✅ import thêm icon
 import { DEFAULT_AVATAR } from "../constants/common";
 
 interface ProfileProps {
   fullName: string;
   email: string;
   imageUrl?: string;
-  userId: string; // cần userId để gọi API
+  userId: string;
 }
 
 export default function Profile({ fullName, email, imageUrl, userId }: ProfileProps) {
   const [friends, setFriends] = useState<GetFriendResponse[]>([]);
+  const avatar = imageUrl || DEFAULT_AVATAR;
 
   const fetchFriends = async () => {
     try {
@@ -31,27 +34,71 @@ export default function Profile({ fullName, email, imageUrl, userId }: ProfilePr
     }
   };
 
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files || e.target.files.length === 0) return;
+
+    const file = e.target.files[0];
+    try {
+      const res = await updateUserImage(userId, file);
+      if (res.data.status === 200) {
+        window.location.reload();
+      } else {
+        console.error("Upload failed:", res.data.message);
+      }
+    } catch (err) {
+      console.error("Error updating image:", err);
+    }
+  };
+
   useEffect(() => {
     fetchFriends();
   }, [userId]);
 
   return (
-    <div className="flex-1 flex flex-col items-center justify-start bg-gray-50 p-6">
-      {/* Profile section */}
-      <div className="flex flex-col items-center mb-8">
-        <img
-          src={imageUrl || DEFAULT_AVATAR}
-          alt="Profile"
-          className="w-32 h-32 rounded-full mb-4 object-cover"
-          referrerPolicy="no-referrer"
-          onError={(e) => (e.currentTarget.src = DEFAULT_AVATAR)}
-        />
-        <h2 className="text-2xl font-semibold text-gray-800">{fullName}</h2>
-        <p className="text-gray-600">{email}</p>
+    <>
+      <div className="flex items-center justify-center gap-40 mt-12 mb-8">
+        {/* Avatar + info */}
+        <div className="flex items-center gap-6">
+          <div className="relative">
+            <img
+              src={avatar}
+              alt="Profile"
+              className="w-32 h-32 rounded-full object-cover border"
+              referrerPolicy="no-referrer"
+              onError={(e) => (e.currentTarget.src = DEFAULT_AVATAR)}
+            />
+            {/* Nút upload ảnh */}
+            <label className="absolute bottom-0 right-0 bg-blue-600 text-white p-2 rounded-full cursor-pointer hover:bg-blue-700 shadow">
+              <input type="file" accept="image/*" hidden onChange={handleImageChange} />
+              <CameraIcon className="w-5 h-5" /> {/* icon thay vì chữ */}
+            </label>
+          </div>
+
+          <div className="flex flex-col justify-end">
+            <h2 className="text-2xl font-semibold text-gray-800">{fullName}</h2>
+            <p className="text-gray-600">{email}</p>
+          </div>
+        </div>
+
+        {/* Actions */}
+        <div className="flex flex-col gap-3">
+          <Link
+            to="/profile/edit"
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-center"
+          >
+            Edit Profile
+          </Link>
+          <Link
+            to="/profile/change-password"
+            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition text-center"
+          >
+            Change Password
+          </Link>
+        </div>
       </div>
 
       {/* Friends list */}
-      <div className="w-full max-w-lg">
+      <div className="w-full max-w-3xl mx-auto">
         <h3 className="text-xl font-semibold mb-4 text-gray-800">Friends</h3>
         {friends.length > 0 ? (
           <ul className="space-y-4">
@@ -88,6 +135,6 @@ export default function Profile({ fullName, email, imageUrl, userId }: ProfilePr
           <p className="text-gray-500">No friends found.</p>
         )}
       </div>
-    </div>
+    </>
   );
 }

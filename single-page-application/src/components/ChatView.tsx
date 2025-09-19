@@ -221,11 +221,11 @@ export default function ChatView({
         setPage(1);
         setHasMore(data.length === PAGE_SIZE);
 
-        requestAnimationFrame(() => {
-          if (messagesEndRef.current) {
-            messagesEndRef.current.scrollIntoView({ behavior: "auto" });
-          }
-        });
+        // requestAnimationFrame(() => {
+        //   if (messagesEndRef.current) {
+        //     messagesEndRef.current.scrollIntoView({ behavior: "auto" });
+        //   }
+        // });
       } catch (err) {
         console.error("Failed to fetch messages:", err);
       } finally {
@@ -235,6 +235,15 @@ export default function ChatView({
 
     load();
   }, [selectedConversation]);
+
+  // scroll xuống cuối mỗi khi messages thay đổi
+  useEffect(() => {
+    if (messages.length > 0) {
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+      }, 100); // delay chút để DOM tính toán xong height
+    }
+  }, [messages]);
 
   // auto clear error
   useEffect(() => {
@@ -733,7 +742,7 @@ export default function ChatView({
                           </div>
                         )}
                       </div>
-                      {isLastInGroup ? (
+                      {/* {isLastInGroup ? (
                         <img
                           src={userAvatar || DEFAULT_AVATAR}
                           alt={userName}
@@ -744,7 +753,7 @@ export default function ChatView({
                         />
                       ) : (
                         <div className="w-8" />
-                      )}
+                      )} */}
                     </div>
                   )}
                   </div>

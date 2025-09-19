@@ -18,10 +18,15 @@ import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.data.mongodb.core.query.Query;
+import org.springframework.data.mongodb.core.query.Criteria;
+import org.springframework.data.mongodb.core.query.Update;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -38,6 +43,31 @@ public class MessageServiceImpl implements MessageService {
     private final LinkPreviewService linkPreviewService;
     private final ModelMapper modelMapper;
     private final SimpMessagingTemplate messagingTemplate;
+    private final MongoTemplate mongoTemplate;
+    private final int BATCH_SIZE = 1000;
+
+    @Async("taskExecutor")
+    @Override
+    public void updateSenderInfoInMessages(String userId, String fullName, String imageUrl) {
+        long total = mongoTemplate.count(
+                Query.query(Criteria.where("sender.userId").is(userId)),
+                MessageEntity.class
+        );
+
+        int skip = 0;
+        while (skip < total) {
+            Query batchQuery = new Query(Criteria.where("sender.userId").is(userId))
+                    .skip(skip)
+                    .limit(BATCH_SIZE);
+
+            Update update = new Update()
+                    .set("sender.fullName", fullName)
+                    .set("sender.imageUrl", imageUrl);
+
+            mongoTemplate.updateMulti(batchQuery, update, MessageEntity.class);
+            skip += BATCH_SIZE;
+        }
+    }
 
     @Override
     public ResponseEntity<MessageResponse> createMessage(MessageCreateRequest request) {

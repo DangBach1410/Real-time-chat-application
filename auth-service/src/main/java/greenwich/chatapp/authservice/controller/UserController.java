@@ -1,15 +1,18 @@
 package greenwich.chatapp.authservice.controller;
 
+import greenwich.chatapp.authservice.dto.request.ChangePasswordRequest;
 import greenwich.chatapp.authservice.dto.request.UpdateRequest;
 import greenwich.chatapp.authservice.dto.response.*;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import greenwich.chatapp.authservice.dto.request.RegisterRequest;
 import greenwich.chatapp.authservice.service.UserService;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -35,6 +38,21 @@ public class UserController {
     @PutMapping("/{id}")
     public ResponseEntity<UserResponse> updateUser(@PathVariable String id, @RequestBody @Valid UpdateRequest request) {
         UserResponse response = userService.updateUser(id, request);
+        return ResponseEntity.status(response.getStatus()).body(response);
+    }
+
+    @PutMapping ("/{id}/change-password")
+    public ResponseEntity<UserResponse> changePassword(@PathVariable String id, @RequestBody @Valid ChangePasswordRequest request) {
+        UserResponse response = userService.changePassword(id, request);
+        return ResponseEntity.status(response.getStatus()).body(response);
+    }
+
+    @PutMapping(value = "{id}/update-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<UserResponse> updateImage(
+            @PathVariable String id,
+            @RequestPart("file") MultipartFile file) {
+
+        UserResponse response = userService.updateImage(id, file);
         return ResponseEntity.status(response.getStatus()).body(response);
     }
 

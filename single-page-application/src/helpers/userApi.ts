@@ -3,6 +3,8 @@ import api from "./axiosInterceptor";
 export interface UserResponse {
   status: number;
   message: string;
+  firstName: string;
+  lastName: string;
   fullName: string;
   email: string;
   imageUrl: string;
