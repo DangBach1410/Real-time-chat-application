@@ -19,7 +19,7 @@ public class MessageController {
     private final MessageService messageService;
 
     @PutMapping()
-    public void updateMessages(
+    public void updateSenderInfoInMessages(
             @RequestParam String userId,
             @RequestParam String fullName,
             @RequestParam String imageUrl) {

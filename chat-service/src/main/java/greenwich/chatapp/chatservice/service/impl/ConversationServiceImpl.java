@@ -1,17 +1,25 @@
 package greenwich.chatapp.chatservice.service.impl;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import greenwich.chatapp.chatservice.dto.request.ConversationCreateRequest;
 import greenwich.chatapp.chatservice.dto.request.ConversationAddMemberRequest;
 import greenwich.chatapp.chatservice.dto.response.ConversationResponse;
+import greenwich.chatapp.chatservice.dto.response.MediaMetadataResponse;
 import greenwich.chatapp.chatservice.dto.response.MemberResponse;
+import greenwich.chatapp.chatservice.dto.response.MessageResponse;
 import greenwich.chatapp.chatservice.entity.ConversationEntity;
 import greenwich.chatapp.chatservice.entity.MemberEntity;
+import greenwich.chatapp.chatservice.entity.MessageEntity;
+import greenwich.chatapp.chatservice.feignclient.MediaServiceClient;
 import greenwich.chatapp.chatservice.repository.ConversationRepository;
+import greenwich.chatapp.chatservice.repository.MessageRepository;
 import greenwich.chatapp.chatservice.service.ConversationService;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Criteria;
@@ -19,6 +27,7 @@ import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.http.ResponseEntity;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -30,8 +39,10 @@ import java.util.stream.Collectors;
 public class ConversationServiceImpl implements ConversationService {
 
     private final ConversationRepository conversationRepository;
+    private final MessageRepository messageRepository;
     private final ModelMapper modelMapper;
     private final MongoTemplate mongoTemplate;
+    private final MediaServiceClient mediaServiceClient;
 
     @Override
     @Async("taskExecutor")
@@ -95,6 +106,23 @@ public class ConversationServiceImpl implements ConversationService {
     }
 
     @Override
+    public ResponseEntity<ConversationResponse> updateImageOfConversation(String conversationId, MultipartFile file) {
+        ConversationEntity conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new RuntimeException("Conversation not found"));
+
+        // Giả sử file đã được lưu và bạn có URL của nó
+        String imageUrl = mediaServiceClient.uploadFiles(List.of(file)).get(0).getUrl();
+
+        if (imageUrl != null && !imageUrl.isEmpty()) {
+            conversation.setImageUrl(imageUrl);
+            ConversationEntity updated = conversationRepository.save(conversation);
+            return ResponseEntity.ok(modelMapper.map(updated, ConversationResponse.class));
+        } else {
+            throw new RuntimeException("Failed to upload image");
+        }
+    }
+
+    @Override
     public ResponseEntity<ConversationResponse> addMembers(String conversationId, ConversationAddMemberRequest request) {
         ConversationEntity conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new RuntimeException("Conversation not found"));
@@ -142,5 +170,75 @@ public class ConversationServiceImpl implements ConversationService {
                 .map(c -> modelMapper.map(c, ConversationResponse.class))
                 .collect(Collectors.toList());
         return ResponseEntity.ok(conversations);
+    }
+    @Override
+    public ResponseEntity<List<MemberResponse>> getMembers(String conversationId) {
+        ConversationEntity conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new RuntimeException("Conversation not found"));
+
+        List<MemberResponse> members = conversation.getMembers().stream()
+                .map(m -> modelMapper.map(m, MemberResponse.class))
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(members);
+    }
+
+    @Override
+    public ResponseEntity<List<MessageResponse>> getMedia(String conversationId, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size);
+
+        Query query = new Query()
+                .addCriteria(Criteria.where("conversationId").is(conversationId)
+                        .and("type").is("media")
+                        .and("content").regex("\"mediaType\"\\s*:\\s*\"(image|video)\""))
+                .with(pageable)
+                .with(Sort.by(Sort.Direction.DESC, "createdAt"));
+
+        List<MessageEntity> messages = mongoTemplate.find(query, MessageEntity.class);
+
+        List<MessageResponse> responses = messages.stream()
+                .map(m -> modelMapper.map(m, MessageResponse.class))
+                .toList();
+
+        return ResponseEntity.ok(responses);
+    }
+
+    @Override
+    public ResponseEntity<List<MessageResponse>> getFiles(String conversationId, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size);
+
+        Query query = new Query()
+                .addCriteria(Criteria.where("conversationId").is(conversationId)
+                        .and("type").is("media")
+                        .and("content").regex("\"mediaType\"\\s*:\\s*\"file\""))
+                .with(pageable)
+                .with(Sort.by(Sort.Direction.DESC, "createdAt"));
+
+        List<MessageEntity> messages = mongoTemplate.find(query, MessageEntity.class);
+
+        List<MessageResponse> responses = messages.stream()
+                .map(m -> modelMapper.map(m, MessageResponse.class))
+                .toList();
+
+        return ResponseEntity.ok(responses);
+    }
+
+    @Override
+    public ResponseEntity<List<MessageResponse>> getLinks(String conversationId, int page, int size) {
+        Pageable pageable = PageRequest.of(page, size);
+
+        Query query = new Query()
+                .addCriteria(Criteria.where("conversationId").is(conversationId)
+                        .and("type").is("link"))
+                .with(pageable)
+                .with(Sort.by(Sort.Direction.DESC, "createdAt"));
+
+        List<MessageEntity> messages = mongoTemplate.find(query, MessageEntity.class);
+
+        List<MessageResponse> responses = messages.stream()
+                .map(m -> modelMapper.map(m, MessageResponse.class))
+                .toList();
+
+        return ResponseEntity.ok(responses);
     }
 }

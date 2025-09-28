@@ -136,8 +136,8 @@ public class UserService {
 
             userRepository.save(user);
             friendAsyncService.updateFriendsAndRequestsInBackground(id, fullName, user.getImageUrl());
-            chatServiceClient.updateConversations(id, fullName, user.getImageUrl());
-            chatServiceClient.updateMessages(id, fullName, user.getImageUrl());
+            chatServiceClient.updateMemberInfoInConversations(id, fullName, user.getImageUrl());
+            chatServiceClient.updateSenderInfoInMessages(id, fullName, user.getImageUrl());
 
             return UserResponse.builder()
                     .status(HttpStatus.OK.value())
@@ -454,8 +454,8 @@ public class UserService {
         user.setImageUrl(imageUrl);
         userRepository.save(user);
         friendAsyncService.updateFriendsAndRequestsInBackground(id, user.getFullName(), imageUrl);
-        chatServiceClient.updateConversations(id, user.getFullName(), imageUrl);
-        chatServiceClient.updateMessages(id, user.getFullName(), imageUrl);
+        chatServiceClient.updateMemberInfoInConversations(id, user.getFullName(), imageUrl);
+        chatServiceClient.updateSenderInfoInMessages(id, user.getFullName(), imageUrl);
 
         return UserResponse.builder()
                 .status(HttpStatus.OK.value())

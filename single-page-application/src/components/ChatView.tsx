@@ -13,6 +13,9 @@ import {
 import { updatePresence, getPresence } from "../helpers/presenceApi";
 import { DEFAULT_AVATAR } from "../constants/common";
 import { FileText, Paperclip, Send } from "lucide-react";
+import ChatCrossBar from "./ChatCrossBar";
+import NewGroupModal from "./NewGroupModal";
+import { getFriends, type GetFriendResponse } from "../helpers/friendApi";
 
 interface ChatViewProps {
   userId: string;
@@ -55,10 +58,25 @@ export default function ChatView({
     {}
   );
   const [typingUsers, setTypingUsers] = useState<Record<string, boolean>>({});
+  const [friends, setFriends] = useState<GetFriendResponse[]>([]);
+  const [showNewGroupModal, setShowNewGroupModal] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const stompClient = useRef<StompJs.Client | null>(null);
+
+  // Load friends
+  useEffect(() => {
+    const loadFriends = async () => {
+      try {
+        const res = await getFriends(userId);
+        setFriends(res.data || []);
+      } catch (err) {
+        console.error("Failed to load friends", err);
+      }
+    };
+    loadFriends();
+  }, [userId]);
 
   // Kết nối WebSocket presence
   useEffect(() => {
@@ -221,11 +239,11 @@ export default function ChatView({
         setPage(1);
         setHasMore(data.length === PAGE_SIZE);
 
-        // requestAnimationFrame(() => {
-        //   if (messagesEndRef.current) {
-        //     messagesEndRef.current.scrollIntoView({ behavior: "auto" });
-        //   }
-        // });
+        requestAnimationFrame(() => {
+          if (messagesEndRef.current) {
+            messagesEndRef.current.scrollIntoView({ behavior: "auto" });
+          }
+        });
       } catch (err) {
         console.error("Failed to fetch messages:", err);
       } finally {
@@ -237,13 +255,13 @@ export default function ChatView({
   }, [selectedConversation]);
 
   // scroll xuống cuối mỗi khi messages thay đổi
-  useEffect(() => {
-    if (messages.length > 0) {
-      setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
-      }, 100); // delay chút để DOM tính toán xong height
-    }
-  }, [messages]);
+  // useEffect(() => {
+  //   if (messages.length > 0) {
+  //     setTimeout(() => {
+  //       messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
+  //     }, 100); // delay chút để DOM tính toán xong height
+  //   }
+  // }, [messages]);
 
   // auto clear error
   useEffect(() => {
@@ -252,6 +270,12 @@ export default function ChatView({
       return () => clearTimeout(t);
     }
   }, [errorMsg]);
+
+  const handleConversationUpdated = (updated: ConversationResponse) => {
+    setConversations(prev =>
+      prev.map(c => (c.id === updated.id ? updated : c))
+    );
+  };
 
   // scroll load more
   const handleScroll = async (e: React.UIEvent<HTMLDivElement>) => {
@@ -577,6 +601,12 @@ export default function ChatView({
     <div className="flex flex-1 overflow-hidden">
       {/* Sidebar */}
       <aside className="w-64 bg-gray-100 border-r overflow-y-auto">
+        <button
+          onClick={() => setShowNewGroupModal(true)}
+          className="w-full py-2 px-4 bg-blue-500 text-white rounded hover:bg-blue-600 mb-2"
+        >
+          New Group
+        </button>
         {loading && (
           <div className="text-center py-3 text-gray-500">Loading...</div>
         )}
@@ -614,14 +644,40 @@ export default function ChatView({
               }`}
             >
               <div className="relative w-10 h-10 shrink-0">
-                <img
+                {/* <img
                   src={displayImage}
                   alt={displayName}
                   className="w-10 h-10 rounded-full object-cover"
                   onError={(e) =>
                     ((e.currentTarget as HTMLImageElement).src = DEFAULT_AVATAR)
                   }
-                />
+                /> */}
+                  {c.type === "group" && !c.imageUrl ? (
+                  <div className="relative w-10 h-10">
+                    {c.members.slice(-2).map((m, idx) => (
+                      <img
+                        key={m.userId}
+                        src={m.imageUrl || DEFAULT_AVATAR}
+                        alt={m.fullName}
+                        className={`absolute object-cover rounded-full ${
+                          idx === 0
+                            ? "top-0 right-0 z-0 w-5 h-5" 
+                            : "bottom-0 left-0 z-10 w-5 h-5"
+                        }`}
+                        style={{ width: "1.65rem", height: "1.65rem" }}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <img
+                    src={displayImage}
+                    alt={displayName}
+                    className="w-10 h-10 rounded-full object-cover"
+                    onError={(e) =>
+                      ((e.currentTarget as HTMLImageElement).src = DEFAULT_AVATAR)
+                    }
+                  />
+                )}
                 {presenceId && (
                   <span
                     className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${
@@ -652,6 +708,21 @@ export default function ChatView({
       <main className="flex-1 flex flex-col bg-white">
         {selectedConversation ? (
           <>
+            <ChatCrossBar
+              conversation={conversations.find(c => c.id === selectedConversation)!}
+              currentUserId={userId}
+              lastSeen={
+                (() => {
+                  const conv = conversations.find(c => c.id === selectedConversation);
+                  if (!conv || conv.type === "group") return null;
+                  const other = conv.members.find((m) => m.userId !== userId);
+                  return other ? usersPresence[other.userId] : null;
+                })()
+              }
+              onVoiceCall={() => alert("Voice call not implemented")}
+              onVideoCall={() => alert("Video call not implemented")}
+              onConversationUpdated={handleConversationUpdated}
+            />
             <div
               ref={scrollRef}
               className="flex-1 overflow-y-auto p-4 space-y-1"
@@ -837,6 +908,18 @@ export default function ChatView({
           </div>
         )}
       </main>
+      {showNewGroupModal && (
+        <NewGroupModal
+          currentUserId={userId}
+          userAvatar={userAvatar}
+          friends={friends}
+          onClose={() => setShowNewGroupModal(false)}
+          onCreated={(conv) => {
+            setConversations((prev) => [conv, ...prev]);
+            setSelectedConversation(conv.id);
+          }}
+        />
+      )}
     </div>
   );
 }

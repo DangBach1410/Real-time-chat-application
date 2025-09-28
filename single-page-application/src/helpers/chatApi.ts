@@ -52,6 +52,20 @@ export interface MessageCreateRequest {
   type: "text" | "link";
 }
 
+export interface MemberRequest {
+  userId: string;
+  fullName: string;
+  imageUrl: string;
+  role: string;
+}
+
+export interface ConversationCreateRequest {
+  type: "private" | "group";
+  name?: string;
+  members: MemberRequest[];
+}
+
+
 // --- APIs ---
 
 // Lấy danh sách conversations
@@ -104,4 +118,91 @@ export async function createMediaMessages(
     headers: { "Content-Type": "multipart/form-data" },
   });
   return res.data as MessageResponse[];
+}
+
+export async function createConversation(
+  req: ConversationCreateRequest
+): Promise<ConversationResponse> {
+  const res = await api.post("/chat/conversations", req);
+  return res.data as ConversationResponse;
+}
+
+// Lấy danh sách members của conversation
+export async function fetchConversationMembers(
+  conversationId: string
+): Promise<MemberResponse[]> {
+  const res = await api.get(`/chat/conversations/${conversationId}/members`);
+  return res.data as MemberResponse[];
+}
+
+// Lấy media của conversation (pagination)
+export async function fetchConversationMedia(
+  conversationId: string,
+  page = 0,
+  size = 20
+): Promise<MessageResponse[]> {
+  const res = await api.get(
+    `/chat/conversations/${conversationId}/media?page=${page}&size=${size}`
+  );
+  return res.data as MessageResponse[];
+}
+
+// Lấy files của conversation (pagination)
+export async function fetchConversationFiles(
+  conversationId: string,
+  page = 0,
+  size = 20
+): Promise<MessageResponse[]> {
+  const res = await api.get(
+    `/chat/conversations/${conversationId}/files?page=${page}&size=${size}`
+  );
+  return res.data as MessageResponse[];
+}
+
+// Lấy links của conversation (pagination)
+export async function fetchConversationLinks(
+  conversationId: string,
+  page = 0,
+  size = 20
+): Promise<MessageResponse[]> {
+  const res = await api.get(
+    `/chat/conversations/${conversationId}/links?page=${page}&size=${size}`
+  );
+  return res.data as MessageResponse[];
+}
+
+// Xóa member khỏi conversation
+export async function removeConversationMember(
+  conversationId: string,
+  userId: string
+): Promise<ConversationResponse> {
+  const res = await api.delete(
+    `/chat/conversations/${conversationId}/members/${userId}`
+  );
+  return res.data as ConversationResponse;
+}
+
+export async function addMembersToConversation(
+  conversationId: string,
+  members: MemberRequest[]
+): Promise<ConversationResponse> {
+  const res = await api.post(`/chat/conversations/${conversationId}/members`, {
+    members,
+  });
+  return res.data as ConversationResponse;
+}
+
+export async function updateConversationImage(
+  conversationId: string,
+  file: File
+): Promise<ConversationResponse> {
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await api.put(
+    `/chat/conversations/${conversationId}/update-image`,
+    formData,
+    { headers: { "Content-Type": "multipart/form-data" } }
+  );
+  return res.data as ConversationResponse;
 }

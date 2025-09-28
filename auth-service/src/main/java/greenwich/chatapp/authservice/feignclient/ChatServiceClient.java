@@ -14,14 +14,14 @@ public interface ChatServiceClient {
     void createConversation(@RequestBody ConversationCreateRequest request);
 
     @PutMapping(value = "/api/v1/chat/conversations")
-    void updateConversations(
+    void updateMemberInfoInConversations(
             @RequestParam String userId,
             @RequestParam String fullName,
             @RequestParam String imageUrl
     );
 
     @PutMapping(value = "/api/v1/chat/messages")
-    void updateMessages(
+    void updateSenderInfoInMessages(
             @RequestParam String userId,
             @RequestParam String fullName,
             @RequestParam String imageUrl
