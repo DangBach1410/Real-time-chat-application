@@ -1,9 +1,9 @@
 import { useEffect, useState, useRef } from "react";
-import { ChevronDown, ChevronUp, File as FileIcon, Camera, UserPlus } from "lucide-react";
+import { ChevronDown, ChevronUp, File as FileIcon, Camera, UserPlus, Pencil, Check, X } from "lucide-react";
 import { DEFAULT_AVATAR } from "../constants/common";
 import type { ConversationResponse, MemberResponse, MessageResponse } from "../helpers/chatApi";
 import AddMemberModal from "./AddMemberModal";
-import { removeConversationMember, updateConversationImage } from "../helpers/chatApi"; // import ap
+import { removeConversationMember, updateConversationImage, updateConversationName } from "../helpers/chatApi"; // import ap
 
 interface ConversationDetailsModalProps {
   conversation: ConversationResponse;
@@ -38,6 +38,8 @@ export default function ConversationDetailsModal({
   const [files, setFiles] = useState<MessageResponse[]>([]);
   const [links, setLinks] = useState<MessageResponse[]>([]);
   const [showAddMember, setShowAddMember] = useState(false);
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [newName, setNewName] = useState(conversation.name || "");
 
   const mediaPage = useRef(0);
   const filesPage = useRef(0);
@@ -259,9 +261,24 @@ export default function ConversationDetailsModal({
 
     try {
       const updatedConversation = await updateConversationImage(conversation.id, file);
-      onConversationUpdated?.(updatedConversation); // 👈 báo ngược lên
+      onConversationUpdated?.(updatedConversation);
     } catch (err) {
       console.error("Failed to update group image", err);
+    }
+  };
+
+  const handleSaveName = async () => {
+    if (!newName.trim() || newName === conversation.name) {
+      setNewName(conversation.name || "");
+      setIsEditingName(false);
+      return;
+    }
+    try {
+      const updated = await updateConversationName(conversation.id, newName);
+      onConversationUpdated?.(updated);
+      setIsEditingName(false);
+    } catch (err) {
+      console.error("Update name failed:", err);
     }
   };
 
@@ -327,7 +344,55 @@ export default function ConversationDetailsModal({
               <Camera size={16} />
             </button>
           </div>
-          <div className="font-medium text-lg text-center">{displayName}</div>
+          {/* <div className="font-medium text-lg text-center">{displayName}</div> */}
+          <div className="flex items-center gap-2">
+            {conversation.type === "group" ? (
+              isEditingName ? (
+                <>
+                  <input
+                    className="border px-2 py-1 rounded flex-1"
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleSaveName();
+                      if (e.key === "Escape") {
+                        setNewName(conversation.name || "");
+                        setIsEditingName(false);
+                      }
+                    }}
+                    autoFocus
+                  />
+                  <button
+                    className="p-1 text-green-600 hover:text-green-800"
+                    onClick={handleSaveName}
+                  >
+                    <Check size={18} />
+                  </button>
+                  <button
+                    className="p-1 text-gray-500 hover:text-gray-700"
+                    onClick={() => {
+                      setNewName(conversation.name || "");
+                      setIsEditingName(false);
+                    }}
+                  >
+                    <X size={18} />
+                  </button>
+                </>
+              ) : (
+                <>
+                  <h2 className="text-lg font-semibold">{conversation.name}</h2>
+                  <button
+                    className="p-1 text-gray-500 hover:text-gray-700"
+                    onClick={() => setIsEditingName(true)}
+                  >
+                    <Pencil size={16} />
+                  </button>
+                </>
+              )
+            ) : (
+              <h2 className="text-lg font-semibold">{displayName}</h2>
+            )}
+          </div>
 
           {/* Nút Add Member */}
           {!isPrivate &&(

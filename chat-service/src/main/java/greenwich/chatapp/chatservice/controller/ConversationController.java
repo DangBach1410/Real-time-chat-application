@@ -36,6 +36,13 @@ public class ConversationController {
         return conversationService.updateImageOfConversation(id, file);
     }
 
+    @PutMapping("/{id}/update-name")
+    public ResponseEntity<ConversationResponse> updateNameOfConversation(
+            @PathVariable String id,
+            @RequestParam String name) {
+        return conversationService.updateNameOfConversation(id, name);
+    }
+
     @PostMapping
     public ResponseEntity<ConversationResponse> createConversation(@RequestBody ConversationCreateRequest request) {
         return conversationService.createConversation(request);

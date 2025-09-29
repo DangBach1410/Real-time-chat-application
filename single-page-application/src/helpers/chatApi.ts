@@ -206,3 +206,15 @@ export async function updateConversationImage(
   );
   return res.data as ConversationResponse;
 }
+
+export async function updateConversationName(
+  conversationId: string,
+  name: string
+): Promise<ConversationResponse> {
+  const res = await api.put(
+    `/chat/conversations/${conversationId}/update-name?name=${encodeURIComponent(
+      name
+    )}`
+  );
+  return res.data as ConversationResponse;
+}

@@ -123,6 +123,20 @@ public class ConversationServiceImpl implements ConversationService {
     }
 
     @Override
+    public ResponseEntity<ConversationResponse> updateNameOfConversation(String conversationId, String name) {
+        ConversationEntity conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new RuntimeException("Conversation not found"));
+
+        if (name != null && !name.isEmpty()) {
+            conversation.setName(name);
+            ConversationEntity updated = conversationRepository.save(conversation);
+            return ResponseEntity.ok(modelMapper.map(updated, ConversationResponse.class));
+        } else {
+            throw new RuntimeException("Name cannot be empty");
+        }
+    }
+
+    @Override
     public ResponseEntity<ConversationResponse> addMembers(String conversationId, ConversationAddMemberRequest request) {
         ConversationEntity conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new RuntimeException("Conversation not found"));
