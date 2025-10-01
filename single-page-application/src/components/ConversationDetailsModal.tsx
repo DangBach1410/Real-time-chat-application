@@ -1,8 +1,9 @@
 import { useEffect, useState, useRef } from "react";
-import { ChevronDown, ChevronUp, File as FileIcon, Camera, UserPlus, Pencil, Check, X } from "lucide-react";
+import { ChevronDown, ChevronUp, File as FileIcon, Camera, UserPlus, Pencil, Check, X, LogOut, XCircle } from "lucide-react";
 import { DEFAULT_AVATAR } from "../constants/common";
 import type { ConversationResponse, MemberResponse, MessageResponse } from "../helpers/chatApi";
 import AddMemberModal from "./AddMemberModal";
+import ConfirmModal from "./ConfirmModal";
 import { removeConversationMember, updateConversationImage, updateConversationName } from "../helpers/chatApi"; // import ap
 
 interface ConversationDetailsModalProps {
@@ -40,6 +41,10 @@ export default function ConversationDetailsModal({
   const [showAddMember, setShowAddMember] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [newName, setNewName] = useState(conversation.name || "");
+  const [confirmData, setConfirmData] = useState<{
+    message: string;
+    onConfirm: () => void;
+  } | null>(null);
 
   const mediaPage = useRef(0);
   const filesPage = useRef(0);
@@ -232,21 +237,46 @@ export default function ConversationDetailsModal({
     }
   };
 
-  // handle remove member (BE call cần bạn triển khai)
-  const handleRemoveMember = async (userId: string) => {
-    if (!isAdmin) return;
-    if (userId === currentUserId) return; // không cho remove bản thân
+  // handle remove member 
+  const handleRemoveMember = (userId: string) => {
+    if (!isAdmin || userId === currentUserId) return;
 
-    if (!confirm("Are you sure you want to remove this member?")) return;
-
-    try {
-      const updatedConversation = await removeConversationMember(conversation.id, userId);
-      setMembers(updatedConversation.members);
-    } catch (err) {
-      console.error("Failed to remove member", err);
-      alert("Failed to remove member");
-    }
+    setConfirmData({
+      message: "Are you sure you want to remove this member?",
+      onConfirm: async () => {
+        try {
+          const updatedConversation = await removeConversationMember(conversation.id, userId);
+          setMembers(updatedConversation.members);
+        } catch (err) {
+          console.error("Failed to remove member", err);
+          alert("Failed to remove member");
+        } finally {
+          setConfirmData(null);
+        }
+      },
+    });
   };
+  
+  const handleLeaveGroup = () => {
+    if (conversation.type !== "group") return;
+
+    setConfirmData({
+      message: "Are you sure you want to leave this group?",
+      onConfirm: async () => {
+        try {
+          await removeConversationMember(conversation.id, currentUserId);
+          window.location.reload();
+        } catch (err) {
+          console.error("Failed to leave group", err);
+          alert("Failed to leave group");
+        } finally {
+          setConfirmData(null);
+        }
+      },
+    });
+  };
+
+
   const handleUpdateGroupImage = () => {
     if (!isAdmin) {
       alert("Only admins can update the group image.");
@@ -429,10 +459,11 @@ export default function ConversationDetailsModal({
                     {/* Nút remove cho admin, nhưng không hiển thị cho chính mình */}
                     {isAdmin && m.userId !== currentUserId && (
                       <button
-                        className="ml-auto text-red-500 text-xs hover:underline"
+                        className="ml-auto text-red-500 hover:text-red-700"
                         onClick={() => handleRemoveMember(m.userId)}
+                        title="Remove member"
                       >
-                        Remove
+                        <XCircle size={18} />
                       </button>
                     )}
                   </div>
@@ -567,6 +598,17 @@ export default function ConversationDetailsModal({
               </div>
             )}
           </div>
+          {conversation.type === "group" && (
+            <div className="mt-4">
+              <button
+                className="w-full py-2 text-red-600 border border-red-600 rounded hover:bg-red-50 flex items-center justify-center gap-2"
+                onClick={handleLeaveGroup}
+              >
+                <LogOut size={18} />
+                Leave Group
+              </button>
+            </div>
+          )}
         </div>
       </div>
       {showAddMember && (
@@ -576,6 +618,13 @@ export default function ConversationDetailsModal({
           existingMembers={members} // những người đã là member
           onClose={() => setShowAddMember(false)}
           onMembersAdded={(cid) => fetchMembers(cid).then(setMembers)}
+        />
+      )}
+      {confirmData && (
+        <ConfirmModal
+          message={confirmData.message}
+          onConfirm={confirmData.onConfirm}
+          onCancel={() => setConfirmData(null)}
         />
       )}
     </div>

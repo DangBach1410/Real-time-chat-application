@@ -43,6 +43,7 @@ function ProfilePage() {
       fullName={user.fullName}
       email={user.email}
       imageUrl={user.imageUrl}
+      provider={user.provider}
     />
   );
 }

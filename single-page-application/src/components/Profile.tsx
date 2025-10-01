@@ -4,16 +4,23 @@ import { getFriends, unfriend, type GetFriendResponse } from "../helpers/friendA
 import { updateUserImage } from "../helpers/authApi"; // ✅ api update ảnh
 import { UserMinusIcon, CameraIcon } from "@heroicons/react/24/solid"; // ✅ import thêm icon
 import { DEFAULT_AVATAR } from "../constants/common";
+import ConfirmModal from "./ConfirmModal";
 
 interface ProfileProps {
   fullName: string;
   email: string;
   imageUrl?: string;
   userId: string;
+  provider?: string; // thêm provider nếu cần
 }
 
-export default function Profile({ fullName, email, imageUrl, userId }: ProfileProps) {
+export default function Profile({ fullName, email, imageUrl, userId, provider }: ProfileProps) {
   const [friends, setFriends] = useState<GetFriendResponse[]>([]);
+  const [confirmData, setConfirmData] = useState<{
+    message: string;
+    onConfirm: () => void;
+  } | null>(null);
+
   const avatar = imageUrl || DEFAULT_AVATAR;
 
   const fetchFriends = async () => {
@@ -25,14 +32,22 @@ export default function Profile({ fullName, email, imageUrl, userId }: ProfilePr
     }
   };
 
-  const handleUnfriend = async (friendId: string) => {
-    try {
-      await unfriend(userId, friendId);
-      setFriends((prev) => prev.filter((f) => f.id !== friendId));
-    } catch (err) {
-      console.error("Error unfriending:", err);
-    }
+  const handleUnfriend = (friendId: string, friendName: string) => {
+    setConfirmData({
+      message: `Are you sure you want to unfriend ${friendName}?`,
+      onConfirm: async () => {
+        try {
+          await unfriend(userId, friendId);
+          setFriends((prev) => prev.filter((f) => f.id !== friendId));
+        } catch (err) {
+          console.error("Error unfriending:", err);
+        } finally {
+          setConfirmData(null);
+        }
+      },
+    });
   };
+
 
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
@@ -81,20 +96,22 @@ export default function Profile({ fullName, email, imageUrl, userId }: ProfilePr
         </div>
 
         {/* Actions */}
-        <div className="flex flex-col gap-3">
-          <Link
-            to="/profile/edit"
-            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-center"
-          >
-            Edit Profile
-          </Link>
-          <Link
-            to="/profile/change-password"
-            className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition text-center"
-          >
-            Change Password
-          </Link>
-        </div>
+        {(!provider) && (
+          <div className="flex flex-col gap-3">
+            <Link
+              to="/profile/edit"
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-center"
+            >
+              Edit Profile
+            </Link>
+            <Link
+              to="/profile/change-password"
+              className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition text-center"
+            >
+              Change Password
+            </Link>
+          </div>
+        )}
       </div>
 
       {/* Friends list */}
@@ -122,7 +139,7 @@ export default function Profile({ fullName, email, imageUrl, userId }: ProfilePr
                   </div>
                 </div>
                 <button
-                  onClick={() => handleUnfriend(friend.id)}
+                  onClick={() => handleUnfriend(friend.id, friend.fullName)}
                   className="flex items-center gap-1 bg-red-500 text-white px-3 py-1 rounded-lg hover:bg-red-600 transition"
                 >
                   <UserMinusIcon className="w-5 h-5" />
@@ -135,6 +152,14 @@ export default function Profile({ fullName, email, imageUrl, userId }: ProfilePr
           <p className="text-gray-500">No friends found.</p>
         )}
       </div>
+      {confirmData && (
+        <ConfirmModal
+          title="Confirm Unfriend"
+          message={confirmData.message}
+          onConfirm={confirmData.onConfirm}
+          onCancel={() => setConfirmData(null)}
+        />
+      )}
     </>
   );
 }

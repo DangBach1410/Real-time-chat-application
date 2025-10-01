@@ -104,6 +104,7 @@ public class UserService {
                 .fullName(user.getFullName())
                 .email(user.getEmail())
                 .imageUrl(user.getImageUrl())
+                .provider(user.getProvider())
                 .build();
     }
 

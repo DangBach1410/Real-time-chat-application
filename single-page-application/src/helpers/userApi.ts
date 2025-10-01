@@ -8,6 +8,7 @@ export interface UserResponse {
   fullName: string;
   email: string;
   imageUrl: string;
+  provider: "google" | "github"; // thêm provider
 }
 
 // Hàm gọi API lấy user theo id

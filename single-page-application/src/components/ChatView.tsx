@@ -16,6 +16,7 @@ import { FileText, Paperclip, Send } from "lucide-react";
 import ChatCrossBar from "./ChatCrossBar";
 import NewGroupModal from "./NewGroupModal";
 import { getFriends, type GetFriendResponse } from "../helpers/friendApi";
+import { Users } from "lucide-react";
 
 interface ChatViewProps {
   userId: string;
@@ -603,9 +604,10 @@ export default function ChatView({
       <aside className="w-64 bg-gray-100 border-r overflow-y-auto">
         <button
           onClick={() => setShowNewGroupModal(true)}
-          className="w-full py-2 px-4 bg-blue-500 text-white rounded hover:bg-blue-600 mb-2"
+          className="w-full py-2 px-4 bg-blue-500 text-white rounded hover:bg-blue-600 mb-2 flex items-center justify-center gap-2"
         >
-          New Group
+          <Users className="w-5 h-5" />
+          <span>New Group</span>
         </button>
         {loading && (
           <div className="text-center py-3 text-gray-500">Loading...</div>
