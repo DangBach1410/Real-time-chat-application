@@ -9,6 +9,7 @@ import Profile from './components/Profile';
 import FriendRequests from './components/FriendRequests';
 import EditProfile from "./components/EditProfile";
 import ChangePassword from "./components/ChangePassword";
+import CallPage from './views/CallPage.tsx';
 
 import { useOutletContext } from "react-router-dom";
 import type { UserResponse } from "./helpers/userApi";
@@ -74,7 +75,7 @@ export default function AppRoutes() {
   return (
     <Router>
       <Routes>
-        <Route path="/" element={<Navigate to="/login" />} />
+        <Route path="/" element={<Navigate to="/chat" />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/oauth2/redirect" element={<OAuth2RedirectHandler />} />
@@ -90,6 +91,7 @@ export default function AppRoutes() {
         </Route>
 
         <Route path="*" element={<Navigate to="/chat" />} />
+        <Route path="/call" element={<CallPage />} /> {/* 👈 route cho tab gọi */}
       </Routes>
     </Router>
   );

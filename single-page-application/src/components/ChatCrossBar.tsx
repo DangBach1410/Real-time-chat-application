@@ -24,8 +24,8 @@ export default function ChatCrossBar({
   conversation,
   currentUserId,
   lastSeen,
-  onVoiceCall,
-  onVideoCall,
+  // onVoiceCall,
+  // onVideoCall,
   onConversationUpdated,
 }: ChatCrossBarProps) {
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
@@ -38,9 +38,9 @@ export default function ChatCrossBar({
   const displayName = isPrivate
     ? otherUser?.fullName
     : conversation.name || "Unnamed group";
-  // const displayImage = isPrivate
-  //   ? otherUser?.imageUrl || DEFAULT_AVATAR
-  //   : conversation.imageUrl || DEFAULT_AVATAR;
+  const displayImage = isPrivate
+    ? otherUser?.imageUrl || DEFAULT_AVATAR
+    : conversation.imageUrl || DEFAULT_AVATAR;
 
   // const admin = conversation.members.find((m) => m.role === "admin");
   // const adminId = admin?.userId || null;
@@ -51,6 +51,11 @@ export default function ChatCrossBar({
       ? Math.floor((Date.now() - lastSeen) / 60000)
       : null;
   const isOnline = diffMinutes !== null && diffMinutes <= 5;
+
+  const openCall = (type: "audio" | "video") => {
+    const url = `/call?channel=${conversation.id}&type=${type}&uid=${currentUserId}`;
+    window.open(url, "_blank", "width=1000,height=700");
+  };
 
   return (
     <div className="flex items-center justify-between px-4 py-2 border-b bg-gray-100">
@@ -65,26 +70,37 @@ export default function ChatCrossBar({
               ((e.currentTarget as HTMLImageElement).src = DEFAULT_AVATAR)
             }
           /> */}
-          {conversation.type === "group" && !conversation.imageUrl ? (
-            <div className="relative w-10 h-10">
-              {conversation.members.slice(-2).map((m, idx) => (
-                <img
-                  key={m.userId}
-                  src={m.imageUrl || DEFAULT_AVATAR}
-                  alt={m.fullName}
-                  className={`absolute object-cover rounded-full ${
-                    idx === 0
-                      ? "top-0 right-0 z-0 w-5 h-5" 
-                      : "bottom-0 left-0 z-10 w-5 h-5"
-                  }`}
-                  style={{ width: "1.65rem", height: "1.65rem" }}
-                />
-              ))}
-            </div>
+          {conversation.type === "group" ? (
+            conversation.imageUrl ? (
+              // 🧩 Trường hợp group có ảnh riêng
+              <img
+                src={conversation.imageUrl}
+                alt={conversation.name || "Group"}
+                className="w-10 h-10 rounded-full object-cover"
+              />
+            ) : (
+              // 🧩 Trường hợp group không có ảnh -> hiển thị 2 thành viên cuối
+              <div className="relative w-10 h-10">
+                {conversation.members.slice(-2).map((m, idx) => (
+                  <img
+                    key={m.userId}
+                    src={m.imageUrl || DEFAULT_AVATAR}
+                    alt={m.fullName}
+                    className={`absolute object-cover rounded-full ${
+                      idx === 0
+                        ? "top-0 right-0 z-0 w-5 h-5"
+                        : "bottom-0 left-0 z-10 w-5 h-5"
+                    }`}
+                    style={{ width: "1.65rem", height: "1.65rem" }}
+                  />
+                ))}
+              </div>
+            )
           ) : (
+            // 🧩 Trường hợp private chat
             <img
-              src={conversation.imageUrl || DEFAULT_AVATAR}
-              alt={conversation.name || "Group"}
+              src={displayImage || DEFAULT_AVATAR}
+              alt={conversation.name || "User"}
               className="w-10 h-10 rounded-full object-cover"
             />
           )}
@@ -121,14 +137,14 @@ export default function ChatCrossBar({
       {/* Right: call icons + 3-dot */}
       <div className="flex items-center gap-3 relative">
         <button
-          onClick={onVoiceCall ?? (() => alert("Voice call not implemented"))}
+          onClick={() => openCall("audio")}
           className="p-2 rounded-full hover:bg-gray-200"
           title="Voice call"
         >
           <Phone className="w-5 h-5" />
         </button>
         <button
-          onClick={onVideoCall ?? (() => alert("Video call not implemented"))}
+          onClick={() => openCall("video")}
           className="p-2 rounded-full hover:bg-gray-200"
           title="Video call"
         >
