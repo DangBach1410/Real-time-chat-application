@@ -255,4 +255,10 @@ public class ConversationServiceImpl implements ConversationService {
 
         return ResponseEntity.ok(responses);
     }
+    @Override
+    public ConversationResponse getConversation(String conversationId) {
+        ConversationEntity conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new RuntimeException("Conversation not found"));
+        return modelMapper.map(conversation, ConversationResponse.class);
+    }
 }

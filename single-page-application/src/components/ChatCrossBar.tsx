@@ -10,6 +10,7 @@ import {
   fetchConversationFiles,
   fetchConversationLinks,
 } from "../helpers/chatApi";
+import { startCall, type CallRequest } from "../helpers/callApi";
 
 interface ChatCrossBarProps {
   conversation: ConversationResponse;
@@ -52,9 +53,29 @@ export default function ChatCrossBar({
       : null;
   const isOnline = diffMinutes !== null && diffMinutes <= 5;
 
-  const openCall = (type: "audio" | "video") => {
-    const url = `/call?channel=${conversation.id}&type=${type}&uid=${currentUserId}`;
-    window.open(url, "_blank", "width=1000,height=700");
+  const openCall = async (type: "audio" | "video") => {
+    try {
+      const currentUser = conversation.members.find(
+        (m) => m.userId === currentUserId
+      );
+      if (!currentUser) throw new Error("User not found in conversation");
+
+      const payload: CallRequest = {
+        type,
+        conversationId: conversation.id,
+        callerId: currentUserId,
+        callerName: currentUser.fullName,
+        callerImage: currentUser.imageUrl || DEFAULT_AVATAR,
+      };
+
+      await startCall(payload); // gửi đến /api/v1/chat/calls/start
+
+      const url = `/call?channel=${conversation.id}&type=${type}&uid=${currentUserId}`;
+      window.open(url, "_blank", "width=1000,height=700");
+    } catch (err) {
+      console.error("❌ Failed to start call:", err);
+      alert("Failed to start call. Please try again.");
+    }
   };
 
   return (

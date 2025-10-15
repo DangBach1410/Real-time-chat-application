@@ -24,4 +24,6 @@ public interface ConversationService {
     ResponseEntity<List<MessageResponse>> getFiles(String conversationId, int page, int size);
     ResponseEntity<List<MessageResponse>> getLinks(String conversationId, int page, int size);
     ResponseEntity<ConversationResponse> updateNameOfConversation(String id, String name);
+
+    ConversationResponse getConversation(String conversationId);
 }

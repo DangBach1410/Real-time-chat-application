@@ -366,13 +366,15 @@ export default function ConversationDetailsModal({
                 onError={(e) => ((e.currentTarget as HTMLImageElement).src = DEFAULT_AVATAR)}
               />
             )}
-
-            <button
-              className="absolute bottom-2 right-2 bg-white rounded-full p-1 shadow hover:bg-gray-100"
-              onClick={(handleUpdateGroupImage)}
-            >
-              <Camera size={16} />
-            </button>
+            {conversation.type === "group" ? (
+              <button
+                className="absolute bottom-2 right-2 bg-white rounded-full p-1 shadow hover:bg-gray-100"
+                onClick={(handleUpdateGroupImage)}
+              >
+                <Camera size={16} />
+              </button>
+              ) : null
+            }
           </div>
           {/* <div className="font-medium text-lg text-center">{displayName}</div> */}
           <div className="flex items-center gap-2">
