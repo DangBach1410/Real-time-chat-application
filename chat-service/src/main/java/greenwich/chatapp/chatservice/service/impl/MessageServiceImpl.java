@@ -121,6 +121,44 @@ public class MessageServiceImpl implements MessageService {
     }
 
     @Override
+    public ResponseEntity<MessageResponse> createNotificationMessage(MessageCreateRequest request) {
+        MemberEntity sender = MemberEntity.builder()
+                .userId(request.getSenderId())
+                .fullName(request.getSenderFullName())
+                .imageUrl(request.getSenderImageUrl())
+                .build();
+
+        MessageEntity message = MessageEntity.builder()
+                .conversationId(request.getConversationId())
+                .sender(sender)
+                .type("notification")
+                .content(request.getContent())
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        MessageEntity savedMessage = messageRepository.save(message);
+
+        MessageResponse response = modelMapper.map(savedMessage, MessageResponse.class);
+
+        // Broadcast cho tất cả client đã subscribe conversation
+        messagingTemplate.convertAndSend(
+                "/topic/conversations/" + request.getConversationId(),
+                response
+        );
+
+        updateLastMessage(
+                request.getConversationId(),
+                sender,
+                "notification",
+                request.getContent(),
+                savedMessage.getId(),
+                savedMessage.getCreatedAt()
+        );
+
+        return ResponseEntity.ok(response);
+    }
+
+    @Override
     public ResponseEntity<List<MessageResponse>> getMessagesByConversation(String conversationId, int page, int size) {
         Pageable pageable = PageRequest.of(page, size);
         List<MessageResponse> messages = messageRepository
@@ -195,5 +233,48 @@ public class MessageServiceImpl implements MessageService {
         conversation.setLastMessage(lastMessage);
         conversation.setLastMessageAt(createdAt);
         conversationRepository.save(conversation);
+    }
+
+    @Override
+    public void createCallMessage(String conversationId,
+                                  String senderId,
+                                  String senderFullName,
+                                  String senderImageUrl,
+                                  String callType) {
+        MemberEntity sender = MemberEntity.builder()
+                .userId(senderId)
+                .fullName(senderFullName)
+                .imageUrl(senderImageUrl)
+                .build();
+
+        // Set content for the call message
+        String content = callType.equalsIgnoreCase("video")
+                ? "Video call"
+                : "Audio call";
+
+        MessageEntity message = MessageEntity.builder()
+                .conversationId(conversationId)
+                .sender(sender)
+                .type(callType + "_call") // "video_call" or "audio_call"
+                .content(content)
+                .createdAt(LocalDateTime.now())
+                .build();
+
+        MessageEntity saved = messageRepository.save(message);
+        MessageResponse response = modelMapper.map(saved, MessageResponse.class);
+
+        // Broadcast to all clients subscribed to the conversation
+        messagingTemplate.convertAndSend("/topic/conversations/" + conversationId, response);
+
+        updateLastMessage(
+                conversationId,
+                sender,
+                callType + "_call",
+                content,
+                saved.getId(),
+                saved.getCreatedAt()
+        );
+
+        ResponseEntity.ok(response);
     }
 }

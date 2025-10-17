@@ -13,7 +13,7 @@ import java.util.List;
 
 public interface ConversationService {
     ResponseEntity<ConversationResponse> createConversation(ConversationCreateRequest request);
-    ResponseEntity<ConversationResponse> updateImageOfConversation(String conversationId, MultipartFile file);
+    ResponseEntity<ConversationResponse> updateImageOfConversation(String conversationId, String userId, String userFullname, MultipartFile file);
     ResponseEntity<ConversationResponse> addMembers(String conversationId, ConversationAddMemberRequest request);
     ResponseEntity<ConversationResponse> removeMember(String conversationId, String userId);
     ResponseEntity<List<ConversationResponse>> getUserConversations(String userId, int page, int size);
@@ -23,7 +23,7 @@ public interface ConversationService {
     ResponseEntity<List<MessageResponse>> getMedia(String conversationId, int page, int size);
     ResponseEntity<List<MessageResponse>> getFiles(String conversationId, int page, int size);
     ResponseEntity<List<MessageResponse>> getLinks(String conversationId, int page, int size);
-    ResponseEntity<ConversationResponse> updateNameOfConversation(String id, String name);
+    ResponseEntity<ConversationResponse> updateNameOfConversation(String id, String userId, String userFullname, String name);
 
     ConversationResponse getConversation(String conversationId);
 }

@@ -42,6 +42,11 @@ public class MessageController {
         return messageService.createMediaMessages(conversationId, senderId, senderName, senderAvatar, files);
     }
 
+    @PostMapping("/notification")
+    public ResponseEntity<MessageResponse> createNotificationMessage(@RequestBody MessageCreateRequest request) {
+        return messageService.createNotificationMessage(request);
+    }
+
     @GetMapping("/conversation/{conversationId}")
     public ResponseEntity<List<MessageResponse>> getMessagesByConversation(
             @PathVariable String conversationId,

@@ -11,7 +11,15 @@ export interface CallRequest {
 }
 
 // Vì backend trả về String -> FE không cần định nghĩa CallResponse
-export async function startCall(req: CallRequest): Promise<string> {
-  const res = await api.post("/chat/calls/start", req);
+export async function startOrJoinCall(req: CallRequest): Promise<string> {
+  const res = await api.post("/chat/calls/start-or-join", req);
+  return res.data as string; // "Call event sent successfully"
+}
+
+// Thêm function để leave call
+export async function leaveCall(conversationId: string, userId: string, userName: string): Promise<string> {
+  const res = await api.delete(`/chat/calls/leave/${conversationId}/${userId}`, {
+    params: { userName },
+  });
   return res.data as string; // "Call event sent successfully"
 }

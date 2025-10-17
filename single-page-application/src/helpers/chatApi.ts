@@ -18,7 +18,7 @@ export interface LastMessageResponse {
     role?: string | null;
     joinedAt?: string | null;
   };
-  type: "text" | "link" | "media";
+  type: "text" | "link" | "media" | "notification" | "video_call" | "audio_call";
   content: string;
   createdAt: string;
 }
@@ -38,7 +38,7 @@ export interface MessageResponse {
   id: string;
   conversationId: string;
   sender: MemberResponse;
-  type: "text" | "link" | "media";
+  type: "text" | "link" | "media" | "notification" | "video_call" | "audio_call";
   content: string; // với media là JSON string chứa metadata
   createdAt: string;
 }
@@ -194,10 +194,14 @@ export async function addMembersToConversation(
 
 export async function updateConversationImage(
   conversationId: string,
+  userId: string,
+  userFullname: string,
   file: File
 ): Promise<ConversationResponse> {
   const formData = new FormData();
   formData.append("file", file);
+  formData.append("userFullname", userFullname);
+  formData.append("userId", userId);
 
   const res = await api.put(
     `/chat/conversations/${conversationId}/update-image`,
@@ -209,12 +213,17 @@ export async function updateConversationImage(
 
 export async function updateConversationName(
   conversationId: string,
+  userId: string,
+  userFullname: string,
   name: string
 ): Promise<ConversationResponse> {
   const res = await api.put(
-    `/chat/conversations/${conversationId}/update-name?name=${encodeURIComponent(
-      name
+    `/chat/conversations/${conversationId}/update-name?userId=${encodeURIComponent(
+      userId
+    )}&name=${encodeURIComponent(name)}&userFullname=${encodeURIComponent(
+      userFullname
     )}`
   );
   return res.data as ConversationResponse;
 }
+

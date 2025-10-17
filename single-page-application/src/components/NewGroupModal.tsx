@@ -3,7 +3,19 @@ import { useState } from "react";
 import { Users } from "lucide-react";
 import { createConversation } from "../helpers/chatApi";
 import { type GetFriendResponse } from "../helpers/friendApi";
+import { fetchUserById } from "../helpers/userApi";
+import { useNavigate } from "react-router-dom";
 import { DEFAULT_AVATAR } from "../constants/common";
+
+function isTokenExpired(token: string): boolean {
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    const exp = payload.exp * 1000;
+    return Date.now() >= exp;
+  } catch (e) {
+    return true;
+  }
+}
 
 interface NewGroupModalProps {
   currentUserId: string;
@@ -32,6 +44,7 @@ export default function NewGroupModal({
   const [name, setName] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [search, setSearch] = useState("");
+  const navigate = useNavigate();
 
   const handleToggleUser = (id: string) => {
     setSelected((prev) =>
@@ -42,16 +55,43 @@ export default function NewGroupModal({
   const handleCreate = async () => {
     if (!name.trim() || selected.length === 0) return;
 
-    const members = [
-      { userId: currentUserId, fullName: "You", imageUrl: userAvatar, role: "admin" },
-      ...selected.map((id) => {
-        const f = friends.find((u) => u.id === id)!;
-        return { userId: f.id, fullName: f.fullName, imageUrl: f.imageUrl || "", role: "member" };
-      }),
-    ];
-
     try {
-      const conv = await createConversation({ type: "group", name: name.trim(), members });
+      // 🧠 Lấy thông tin user hiện tại (phải chờ)
+      const token = localStorage.getItem("refreshToken");
+      const userId = localStorage.getItem("userId");
+
+      if (!token || isTokenExpired(token) || !userId) {
+        localStorage.clear();
+        navigate("/login");
+        return;
+      }
+
+      const data = await fetchUserById(userId); // ✅ await ở đây
+
+      const members = [
+        {
+          userId: currentUserId,
+          fullName: data.fullName || "Unknown User",
+          imageUrl: userAvatar,
+          role: "admin",
+        },
+        ...selected.map((id) => {
+          const f = friends.find((u) => u.id === id)!;
+          return {
+            userId: f.id,
+            fullName: f.fullName,
+            imageUrl: f.imageUrl || "",
+            role: "member",
+          };
+        }),
+      ];
+
+      const conv = await createConversation({
+        type: "group",
+        name: name.trim(),
+        members,
+      });
+
       onCreated(conv);
       onClose();
     } catch (err) {

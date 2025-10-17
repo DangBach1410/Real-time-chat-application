@@ -9,6 +9,8 @@ import { APP_ID, agoraClient } from "../helpers/agora";
 import { Mic, MicOff, Video, VideoOff, Phone } from "lucide-react";
 import { useUser } from "../hooks/useUser";
 import { DEFAULT_AVATAR } from "../constants/common";
+import { leaveCall } from "../helpers/callApi";
+import { fetchUserById } from "../helpers/userApi";
 
 export default function CallPage() {
   const url = new URL(window.location.href);
@@ -19,6 +21,7 @@ export default function CallPage() {
   const [remoteUsers, setRemoteUsers] = useState<IAgoraRTCRemoteUser[]>([]);
   const [isMicOn, setIsMicOn] = useState(true);
   const [isCamOn, setIsCamOn] = useState(type === "video");
+  const [currentUser, setCurrentUser] = useState<any>(null);
 
   const localAudioTrack = useRef<IMicrophoneAudioTrack | null>(null);
   const localVideoTrack = useRef<ICameraVideoTrack | null>(null);
@@ -27,6 +30,14 @@ export default function CallPage() {
 
   const remoteUserIds = useMemo(() => remoteUsers.map(u => u.uid.toString()), [remoteUsers]);
   const { users: remoteUserInfo } = useUser(remoteUserIds);
+  const userId = localStorage.getItem("userId");
+  useEffect(() => {
+
+    if (!userId) return;
+    fetchUserById(userId)
+      .then((data) => setCurrentUser(data))
+      .catch(() => console.warn("Cannot fetch current user info"));
+  }, []);
 
   useEffect(() => {
     const init = async () => {
@@ -130,6 +141,24 @@ export default function CallPage() {
     setIsCamOn(!isCamOn);
   };
 
+  const handleLeaveCall = async () => {
+    try {
+      if (currentUser && channel) {
+        console.log("user id: " + userId);
+        console.log("user name: " + currentUser.fullName);
+        await leaveCall(channel, uid, currentUser.fullName);
+        console.log("Leave call success");
+      } else {
+        console.warn("Cannot leave call: missing user or conversationId");
+
+      }
+    } catch (err) {
+      console.error("Leave call failed:", err);
+    } finally {
+      window.close(); // vẫn giữ logic cũ
+    }
+  };
+
   const totalParticipants = remoteUsers.length + 1;
   const isLocalPIP = totalParticipants > PIP_THRESHOLD;
 
@@ -199,7 +228,7 @@ export default function CallPage() {
 
         <button
           className="p-3 rounded-full bg-red-600 hover:bg-red-700 transition"
-          onClick={() => window.close()}
+          onClick={handleLeaveCall}
         >
           <Phone size={22} />
         </button>

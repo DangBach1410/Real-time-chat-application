@@ -15,9 +15,15 @@ public class CallController {
 
     private static final String CALL_EVENT_SUCCESS_MESSAGE = "Call event sent successfully";
 
-    @PostMapping("/start")
-    public ResponseEntity<String> startCallEvent(@RequestBody CallRequest callRequest) {
-        callService.startCall(callRequest);
+    @PostMapping("/start-or-join")
+    public ResponseEntity<String> startOrJoinCall(@RequestBody CallRequest request) {
+        callService.startOrJoinCall(request);
+        return ResponseEntity.ok(CALL_EVENT_SUCCESS_MESSAGE);
+    }
+
+    @DeleteMapping("/leave/{conversationId}/{userId}")
+    public ResponseEntity<String> leaveCall(@PathVariable String conversationId, @PathVariable String userId, @RequestParam String userName) {
+        callService.leaveCall(conversationId, userId, userName);
         return ResponseEntity.ok(CALL_EVENT_SUCCESS_MESSAGE);
     }
 }

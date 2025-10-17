@@ -1,11 +1,15 @@
 import { useEffect } from "react";
 import { Phone, X } from "lucide-react";
+import { startOrJoinCall, type CallRequest } from "../helpers/callApi";
+import { fetchUserById, type UserResponse } from "../helpers/userApi";
+import { useState } from "react";
 
 interface IncomingCallModalProps {
   open: boolean;
   callerName: string;
   callerImage?: string;
   callType: "audio" | "video";
+  conversationId: string;
   conversationName?: string;
   onAccept: () => void;
   onDecline: () => void;
@@ -17,11 +21,23 @@ export default function IncomingCallModal({
   callerName,
   callerImage,
   callType,
+  conversationId,
   conversationName,
   onAccept,
   onDecline,
   onTimeout,
 }: IncomingCallModalProps) {
+  const [currentUser, setCurrentUser] = useState<UserResponse | null>(null);
+
+  useEffect(() => {  
+    const userId = localStorage.getItem("userId");
+    if (!userId) return;
+
+    fetchUserById(userId)
+      .then((user) => setCurrentUser(user))
+      .catch((err) => console.error("Failed to fetch current user:", err));
+  }, []);
+
   useEffect(() => {
     if (!open) return;
 
@@ -64,7 +80,24 @@ export default function IncomingCallModal({
 
         <div className="flex justify-center gap-6">
           <button
-            onClick={() => {onAccept()}}
+            onClick={async () => {
+              try {
+                const callerId = localStorage.getItem("userId") || "";
+                const req: CallRequest = {
+                  type: callType,
+                  conversationId: conversationId,
+                  conversationName,
+                  callerId,
+                  callerName: currentUser?.fullName || "",
+                  callerImage: currentUser?.imageUrl || "",
+                };
+                const res = await startOrJoinCall(req);
+                console.log(res); // "Call event sent successfully"
+                onAccept(); // gọi callback gốc
+              } catch (error) {
+                console.error("Failed to start/join call:", error);
+              }
+            }}
             className="bg-green-500 hover:bg-green-600 text-white p-4 rounded-full flex items-center justify-center"
           >
             <Phone size={24} />

@@ -10,7 +10,7 @@ import {
   fetchConversationFiles,
   fetchConversationLinks,
 } from "../helpers/chatApi";
-import { startCall, type CallRequest } from "../helpers/callApi";
+import { startOrJoinCall, type CallRequest } from "../helpers/callApi";
 
 interface ChatCrossBarProps {
   conversation: ConversationResponse;
@@ -68,7 +68,7 @@ export default function ChatCrossBar({
         callerImage: currentUser.imageUrl || DEFAULT_AVATAR,
       };
 
-      await startCall(payload); // gửi đến /api/v1/chat/calls/start
+      await startOrJoinCall(payload); // gửi đến /api/v1/chat/calls/start
 
       const url = `/call?channel=${conversation.id}&type=${type}&uid=${currentUserId}`;
       window.open(url, "_blank", "width=1000,height=700");

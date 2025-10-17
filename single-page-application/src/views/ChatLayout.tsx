@@ -125,6 +125,7 @@ export default function ChatLayout() {
         callerName={incomingCall?.callerName || ""}
         callerImage={incomingCall?.callerImage}
         callType={(incomingCall?.type as "audio" | "video") || "audio"}
+        conversationId={incomingCall?.conversationId || ""}
         conversationName={incomingCall?.conversationName}
         onAccept={() => {
           if (!incomingCall) return;

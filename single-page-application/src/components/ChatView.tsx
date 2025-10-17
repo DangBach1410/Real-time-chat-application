@@ -433,7 +433,34 @@ export default function ChatView({
   // render message content
   const renderContent = (m: MessageResponse) => {
     if (m.type === "text") return <div>{m.content}</div>;
-
+    if (m.type === "video_call" || m.type === "audio_call") {
+      const isVideo = m.type === "video_call";
+      return (
+        <div
+          onClick={() => alert("Joining call...")}
+          className={`flex flex-col items-center justify-center gap-2 px-4 py-3 rounded-2xl text-white cursor-pointer ${
+            isVideo ? "bg-purple-700 hover:bg-purple-800" : "bg-indigo-700 hover:bg-indigo-800"
+          }`}
+        >
+          <div className="flex items-center gap-2">
+            {isVideo ? (
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14" />
+                <rect x="3" y="7" width="12" height="10" rx="2" ry="2" />
+              </svg>
+            ) : (
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.05 5A7 7 0 015 15.05M15 10a5 5 0 01-5 5" />
+              </svg>
+            )}
+            <span className="font-semibold text-base">
+              {isVideo ? "Group video call" : "Group audio call"}
+            </span>
+          </div>
+          <span className="text-sm opacity-90">Click to join call</span>
+        </div>
+      );
+    }
     if (m.type === "link") {
       try {
         const meta = JSON.parse(m.content);
@@ -536,7 +563,17 @@ export default function ChatView({
     if (!c.lastMessage) return "No messages yet";
     const { type, sender, content } = c.lastMessage;
 
+    if (type === "notification") {
+      return sender.userId === userId
+        ? `You ${content}`
+        : `${sender.fullName} ${content}`;
+    }
+
     if (type === "text") return content;
+    if (type === "video_call")
+      return `${sender.fullName} started a video call`;
+    if (type === "audio_call")
+      return `${sender.fullName} started an audio call`;
     if (type === "link") return `${sender.fullName} have send a link`;
     if (type === "media") {
       try {
@@ -737,6 +774,18 @@ export default function ChatView({
                 const isFirstInGroup = !prev || prev.sender.userId !== m.sender.userId;
                 const isLastInGroup = !next || next.sender.userId !== m.sender.userId;
 
+                if (m.type === "notification") {
+                  const displayText = isOwn
+                    ? `You ${m.content}`
+                    : `${m.sender?.fullName ?? ""} ${m.content}`;
+                  return (
+                    <div key={m.id} className="flex justify-center my-2">
+                      <div className="bg-gray-200 text-gray-700 text-sm px-4 py-2 rounded-full shadow-sm">
+                        {displayText}
+                      </div>
+                    </div>
+                  );
+                }
                 return (
                   <div
                     key={m.id}
@@ -764,10 +813,14 @@ export default function ChatView({
                             {m.sender.fullName}
                           </span>
                         )}
-
-                        {m.type === "link" ? (
+                        {m.type === "video_call" || m.type === "audio_call" ? (
+                          // ① Call message
+                          renderContent(m)
+                        ) : m.type === "link" ? (
+                          // ② Link message
                           renderContent(m)
                         ) : (
+                          // ③ Normal message bubble
                           <div
                             className={`${
                               m.type === "media" &&
@@ -793,27 +846,32 @@ export default function ChatView({
                   {isOwn && (
                     <div className="flex items-end gap-2">
                       <div className="flex flex-col items-end">
-                        {m.type === "link" ? (
-                          renderContent(m)
-                        ) : (
-                          <div
-                            className={`${
-                              m.type === "media" &&
-                              (() => {
-                                try {
-                                  const { mediaType } = JSON.parse(m.content);
-                                  return ["image", "video", "audio"].includes(mediaType);
-                                } catch {
-                                  return false;
-                                }
-                              })()
-                                ? "" // media thì không bọc bubble
-                                : "bg-blue-500 text-white rounded-2xl px-3 py-2 max-w-xs whitespace-pre-wrap break-words"
-                            }`}
-                          >
-                            {renderContent(m)}
-                          </div>
-                        )}
+                      {m.type === "video_call" || m.type === "audio_call" ? (
+                        // ① Cuộc gọi
+                        renderContent(m)
+                      ) : m.type === "link" ? (
+                        // ② Link
+                        renderContent(m)
+                      ) : (
+                        // ③ Tin nhắn thường
+                        <div
+                          className={`${
+                            m.type === "media" &&
+                            (() => {
+                              try {
+                                const { mediaType } = JSON.parse(m.content);
+                                return ["image", "video", "audio"].includes(mediaType);
+                              } catch {
+                                return false;
+                              }
+                            })()
+                              ? "" // media thì không bọc bubble
+                              : "bg-blue-500 text-white rounded-2xl px-3 py-2 max-w-xs whitespace-pre-wrap break-words"
+                          }`}
+                        >
+                          {renderContent(m)}
+                        </div>
+                      )}
                       </div>
                       {/* {isLastInGroup ? (
                         <img

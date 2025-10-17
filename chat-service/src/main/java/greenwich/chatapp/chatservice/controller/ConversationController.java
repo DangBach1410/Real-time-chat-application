@@ -32,15 +32,19 @@ public class ConversationController {
     @PutMapping(value = "/{id}/update-image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<ConversationResponse> updateImageOfConversation(
             @PathVariable String id,
+            @RequestParam String userId,
+            @RequestParam String userFullname,
             @RequestPart("file") MultipartFile file) {
-        return conversationService.updateImageOfConversation(id, file);
+        return conversationService.updateImageOfConversation(id, userId, userFullname, file);
     }
 
     @PutMapping("/{id}/update-name")
     public ResponseEntity<ConversationResponse> updateNameOfConversation(
             @PathVariable String id,
+            @RequestParam String userId,
+            @RequestParam String userFullname,
             @RequestParam String name) {
-        return conversationService.updateNameOfConversation(id, name);
+        return conversationService.updateNameOfConversation(id, userId, userFullname, name);
     }
 
     @PostMapping

@@ -16,4 +16,10 @@ public interface MessageService {
     ResponseEntity<List<MessageResponse>> getMessagesByConversation(String conversationId, int page, int size);
     ResponseEntity<List<MessageResponse>> createMediaMessages(
             String conversationId, String senderId, String senderName, String senderAvatar, List<MultipartFile> files);
+    ResponseEntity<MessageResponse> createNotificationMessage(MessageCreateRequest request);
+    void createCallMessage(String conversationId,
+                           String senderId,
+                           String senderFullName,
+                           String senderImageUrl,
+                           String callType);
 }

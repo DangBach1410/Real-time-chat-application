@@ -4,7 +4,9 @@ import { DEFAULT_AVATAR } from "../constants/common";
 import type { ConversationResponse, MemberResponse, MessageResponse } from "../helpers/chatApi";
 import AddMemberModal from "./AddMemberModal";
 import ConfirmModal from "./ConfirmModal";
-import { removeConversationMember, updateConversationImage, updateConversationName } from "../helpers/chatApi"; // import ap
+import { removeConversationMember, updateConversationImage, updateConversationName } from "../helpers/chatApi";
+import { fetchUserById } from "../helpers/userApi";
+import type { UserResponse } from "../helpers/userApi";
 
 interface ConversationDetailsModalProps {
   conversation: ConversationResponse;
@@ -278,22 +280,43 @@ export default function ConversationDetailsModal({
 
 
   const handleUpdateGroupImage = () => {
-    if (!isAdmin) {
-      alert("Only admins can update the group image.");
-      return;
-    }
     fileInputRef.current?.click();
   };
+
+  // --- Hàm helper lấy user fullname ---
+  async function getCurrentUser(): Promise<UserResponse | null> {
+    try {
+      const userId = localStorage.getItem("userId");
+      if (!userId) return null;
+      return await fetchUserById(userId);
+    } catch (err) {
+      console.error("Failed to fetch current user:", err);
+      return null;
+    }
+  }
 
   const onFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files?.length) return;
     const file = e.target.files[0];
 
     try {
-      const updatedConversation = await updateConversationImage(conversation.id, file);
+      const user = await getCurrentUser();
+      if (!user) {
+        alert("User not found. Please re-login.");
+        return;
+      }
+
+      const updatedConversation = await updateConversationImage(
+        conversation.id,
+        currentUserId,
+        user.fullName,
+        file
+      );
+
       onConversationUpdated?.(updatedConversation);
     } catch (err) {
       console.error("Failed to update group image", err);
+      alert("Failed to update group image");
     }
   };
 
@@ -303,12 +326,26 @@ export default function ConversationDetailsModal({
       setIsEditingName(false);
       return;
     }
+
     try {
-      const updated = await updateConversationName(conversation.id, newName);
+      const user = await getCurrentUser();
+      if (!user) {
+        alert("User not found. Please re-login.");
+        return;
+      }
+
+      const updated = await updateConversationName(
+        conversation.id,
+        currentUserId,
+        user.fullName,
+        newName
+      );
+
       onConversationUpdated?.(updated);
       setIsEditingName(false);
     } catch (err) {
       console.error("Update name failed:", err);
+      alert("Failed to update group name");
     }
   };
 

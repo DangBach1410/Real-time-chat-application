@@ -1,10 +1,9 @@
 package greenwich.chatapp.chatservice.service.impl;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import greenwich.chatapp.chatservice.dto.request.ConversationCreateRequest;
 import greenwich.chatapp.chatservice.dto.request.ConversationAddMemberRequest;
+import greenwich.chatapp.chatservice.dto.request.MessageCreateRequest;
 import greenwich.chatapp.chatservice.dto.response.ConversationResponse;
-import greenwich.chatapp.chatservice.dto.response.MediaMetadataResponse;
 import greenwich.chatapp.chatservice.dto.response.MemberResponse;
 import greenwich.chatapp.chatservice.dto.response.MessageResponse;
 import greenwich.chatapp.chatservice.entity.ConversationEntity;
@@ -12,11 +11,10 @@ import greenwich.chatapp.chatservice.entity.MemberEntity;
 import greenwich.chatapp.chatservice.entity.MessageEntity;
 import greenwich.chatapp.chatservice.feignclient.MediaServiceClient;
 import greenwich.chatapp.chatservice.repository.ConversationRepository;
-import greenwich.chatapp.chatservice.repository.MessageRepository;
 import greenwich.chatapp.chatservice.service.ConversationService;
+import greenwich.chatapp.chatservice.service.MessageService;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
@@ -39,7 +37,7 @@ import java.util.stream.Collectors;
 public class ConversationServiceImpl implements ConversationService {
 
     private final ConversationRepository conversationRepository;
-    private final MessageRepository messageRepository;
+    private final MessageService messageService;
     private final ModelMapper modelMapper;
     private final MongoTemplate mongoTemplate;
     private final MediaServiceClient mediaServiceClient;
@@ -102,20 +100,57 @@ public class ConversationServiceImpl implements ConversationService {
                 .build();
 
         ConversationEntity saved = conversationRepository.save(conversation);
+        // Người tạo nhóm là member đầu tiên
+        MemberEntity creator = saved.getMembers().get(0);
+
+        // Thông báo người tạo nhóm
+        MessageCreateRequest createMsg = MessageCreateRequest.builder()
+                .conversationId(saved.getId())
+                .senderId(creator.getUserId())
+                .senderFullName(creator.getFullName())
+                .senderImageUrl(creator.getImageUrl())
+                .content("created the group")
+                .build();
+
+        messageService.createNotificationMessage(createMsg);
+
+        // Thông báo các thành viên khác đã tham gia
+        saved.getMembers().stream().skip(1).forEach(member -> {
+            MessageCreateRequest joinMsg = MessageCreateRequest.builder()
+                    .conversationId(saved.getId())
+                    .senderId(member.getUserId())
+                    .senderFullName(member.getFullName())
+                    .senderImageUrl(member.getImageUrl())
+                    .content("joined the group")
+                    .build();
+            messageService.createNotificationMessage(joinMsg);
+        });
         return ResponseEntity.ok(modelMapper.map(saved, ConversationResponse.class));
     }
 
     @Override
-    public ResponseEntity<ConversationResponse> updateImageOfConversation(String conversationId, MultipartFile file) {
+    public ResponseEntity<ConversationResponse> updateImageOfConversation(String conversationId, String userId, String userFullname, MultipartFile file) {
         ConversationEntity conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new RuntimeException("Conversation not found"));
 
-        // Giả sử file đã được lưu và bạn có URL của nó
         String imageUrl = mediaServiceClient.uploadFiles(List.of(file)).get(0).getUrl();
 
         if (imageUrl != null && !imageUrl.isEmpty()) {
             conversation.setImageUrl(imageUrl);
             ConversationEntity updated = conversationRepository.save(conversation);
+
+            // 🔥 Gửi notification message qua messageService
+            MessageCreateRequest notificationRequest = MessageCreateRequest.builder()
+                    .conversationId(conversationId)
+                    .senderId(userId)
+                    .senderFullName(userFullname)
+                    .senderImageUrl(null) // có thể fetch từ userService nếu cần
+                    .type("notification")
+                    .content("updated the group photo")
+                    .build();
+
+            messageService.createNotificationMessage(notificationRequest);
+
             return ResponseEntity.ok(modelMapper.map(updated, ConversationResponse.class));
         } else {
             throw new RuntimeException("Failed to upload image");
@@ -123,13 +158,25 @@ public class ConversationServiceImpl implements ConversationService {
     }
 
     @Override
-    public ResponseEntity<ConversationResponse> updateNameOfConversation(String conversationId, String name) {
+    public ResponseEntity<ConversationResponse> updateNameOfConversation(String conversationId, String userId, String userFullname, String name) {
         ConversationEntity conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new RuntimeException("Conversation not found"));
 
         if (name != null && !name.isEmpty()) {
             conversation.setName(name);
             ConversationEntity updated = conversationRepository.save(conversation);
+
+            // 🔥 Gửi notification message qua messageService
+            MessageCreateRequest notificationRequest = MessageCreateRequest.builder()
+                    .conversationId(conversationId)
+                    .senderId(userId)
+                    .senderFullName(userFullname)
+                    .senderImageUrl(null) // có thể fetch user
+                    .type("notification")
+                    .content("changed the group name to " + name)
+                    .build();
+
+            messageService.createNotificationMessage(notificationRequest);
             return ResponseEntity.ok(modelMapper.map(updated, ConversationResponse.class));
         } else {
             throw new RuntimeException("Name cannot be empty");
@@ -151,6 +198,18 @@ public class ConversationServiceImpl implements ConversationService {
                         .joinedAt(LocalDateTime.now())
                         .build();
                 conversation.getMembers().add(newMember);
+
+                // 🔥 Gửi notification message cho việc thêm thành viên
+                MessageCreateRequest notificationRequest = MessageCreateRequest.builder()
+                        .conversationId(conversationId)
+                        .senderId(m.getUserId())
+                        .senderFullName(m.getFullName())
+                        .senderImageUrl(m.getImageUrl())
+                        .type("notification")
+                        .content("joined the conversation")
+                        .build();
+
+                messageService.createNotificationMessage(notificationRequest);
             }
         }
 
@@ -163,14 +222,27 @@ public class ConversationServiceImpl implements ConversationService {
         ConversationEntity conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new RuntimeException("Conversation not found"));
 
-        boolean removed = conversation.getMembers()
-                .removeIf(member -> member.getUserId().equals(userId));
+        MemberEntity removedMember = conversation.getMembers().stream()
+                .filter(member -> member.getUserId().equals(userId))
+                .findFirst()
+                .orElseThrow(() -> new RuntimeException("Member not found in this conversation"));
 
-        if (!removed) {
-            throw new RuntimeException("Member not found in this conversation");
-        }
+        conversation.getMembers().remove(removedMember);
 
         ConversationEntity updated = conversationRepository.save(conversation);
+
+        // 🔥 Gửi notification message cho việc rời nhóm
+        MessageCreateRequest notificationRequest = MessageCreateRequest.builder()
+                .conversationId(conversationId)
+                .senderId(userId)
+                .senderFullName(removedMember.getFullName())
+                .senderImageUrl(removedMember.getImageUrl())
+                .type("notification")
+                .content("left the conversation")
+                .build();
+
+        messageService.createNotificationMessage(notificationRequest);
+
         return ResponseEntity.ok(modelMapper.map(updated, ConversationResponse.class));
     }
 
