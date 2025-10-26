@@ -17,6 +17,8 @@ import ChatCrossBar from "./ChatCrossBar";
 import NewGroupModal from "./NewGroupModal";
 import { getFriends, type GetFriendResponse } from "../helpers/friendApi";
 import { Users } from "lucide-react";
+import { Phone, Video } from "lucide-react"
+import { Mic, Square } from "lucide-react";
 
 interface ChatViewProps {
   userId: string;
@@ -51,6 +53,8 @@ export default function ChatView({
   const [messages, setMessages] = useState<MessageResponse[]>([]);
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
+  const [convPage, setConvPage] = useState(1);
+  const [convHasMore, setConvHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
   const [newMessage, setNewMessage] = useState("");
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
@@ -61,10 +65,24 @@ export default function ChatView({
   const [typingUsers, setTypingUsers] = useState<Record<string, boolean>>({});
   const [friends, setFriends] = useState<GetFriendResponse[]>([]);
   const [showNewGroupModal, setShowNewGroupModal] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
+  const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const stompClient = useRef<StompJs.Client | null>(null);
+  const [recordDuration, setRecordDuration] = useState(0);
+
+  useEffect(() => {
+    if (!isRecording || !recordingStartTime) return;
+
+    const interval = setInterval(() => {
+      setRecordDuration(Math.floor((Date.now() - recordingStartTime) / 1000));
+    }, 500);
+
+    return () => clearInterval(interval);
+  }, [isRecording, recordingStartTime]);
 
   // Load friends
   useEffect(() => {
@@ -110,6 +128,38 @@ export default function ChatView({
     return () => {
       client.deactivate();
       console.log("Presence STOMP disconnected");
+    };
+  }, [userId]);
+
+  // Kết nối WebSocket global conversation updates
+  useEffect(() => {
+    if (!userId) return;
+
+    const socket = new SockJS("http://localhost:8083/ws");
+    const client = new StompJs.Client({
+      webSocketFactory: () => socket,
+      debug: (str) => console.log("Global STOMP:", str),
+      reconnectDelay: 5000,
+    });
+
+    client.onConnect = () => {
+      console.log("Connected to /topic/conversations/user/" + userId);
+      client.subscribe(`/topic/conversations/user/${userId}`, (message) => {
+        try {
+          const updatedConversation: ConversationResponse = JSON.parse(message.body);
+          upsertConversation(updatedConversation);
+          console.log("Received conversation update:", updatedConversation);
+        } catch (err) {
+          console.error("Failed to parse global conversation update", err);
+        }
+      });
+    };
+
+    client.activate();
+
+    return () => {
+      client.deactivate();
+      console.log("Disconnected from global topic");
     };
   }, [userId]);
 
@@ -278,6 +328,30 @@ export default function ChatView({
     );
   };
 
+  const upsertConversation = (updated: ConversationResponse) => { 
+    setConversations(prev => {
+      const lastMsg = updated.lastMessage;  
+      // Nếu lastMessage là notification rời nhóm của chính user -> loại khỏi sidebar
+      if (
+        lastMsg &&
+        lastMsg.sender.userId === userId &&
+        lastMsg.type === "notification" &&
+        lastMsg.content === "left the conversation"
+      ) {
+        setSelectedConversation(prev => (prev === updated.id ? null : prev));
+        return prev.filter(c => c.id !== updated.id);
+      }
+
+      const exists = prev.find(c => c.id === updated.id);
+
+      if (exists) {
+        return [updated, ...prev.filter(c => c.id !== updated.id)];
+      } else {
+        return [updated, ...prev];
+      }
+    });
+  };
+
   // scroll load more
   const handleScroll = async (e: React.UIEvent<HTMLDivElement>) => {
     const target = e.currentTarget;
@@ -303,6 +377,61 @@ export default function ChatView({
       } finally {
         setLoading(false);
       }
+    }
+  };
+
+  const handleSidebarScroll = async (e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.currentTarget;
+    const threshold = 50; // gần đáy
+    if (convHasMore && !loading && target.scrollHeight - target.scrollTop - target.clientHeight < threshold) {
+      setLoading(true);
+      try {
+        const more = await fetchConversations(userId, convPage, PAGE_SIZE);
+        setConversations((prev) => [...prev, ...more]);
+        setConvPage((prev) => prev + 1);
+        setConvHasMore(more.length === PAGE_SIZE);
+      } catch (err) {
+        console.error("Failed to load more conversations:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  // thêm phía dưới cùng của các hàm handle khác
+  const handleToggleRecording = async () => {
+    if (isRecording) {
+      // đang ghi thì dừng
+      mediaRecorder?.stop();
+      setIsRecording(false);
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      const chunks: Blob[] = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunks.push(e.data);
+      };
+
+      recorder.onstop = () => {
+        const blob = new Blob(chunks, { type: "audio/webm" });
+        const file = new File([blob], `recording_${Date.now()}.webm`, {
+          type: "audio/webm",
+        });
+        setPendingFiles((prev) => [...prev, file]);
+        stream.getTracks().forEach((t) => t.stop());
+      };
+
+      recorder.start();
+      setMediaRecorder(recorder);
+      setIsRecording(true);
+      setRecordingStartTime(Date.now());
+    } catch (err) {
+      console.error("Microphone access denied:", err);
+      setErrorMsg("Microphone access denied.");
     }
   };
 
@@ -444,17 +573,12 @@ export default function ChatView({
         >
           <div className="flex items-center gap-2">
             {isVideo ? (
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14" />
-                <rect x="3" y="7" width="12" height="10" rx="2" ry="2" />
-              </svg>
+              <Video className="w-6 h-6 text-white-600" />
             ) : (
-              <svg xmlns="http://www.w3.org/2000/svg" className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.05 5A7 7 0 015 15.05M15 10a5 5 0 01-5 5" />
-              </svg>
+              <Phone className="w-4 h-4 text-white-600" />
             )}
             <span className="font-semibold text-base">
-              {isVideo ? "Group video call" : "Group audio call"}
+              {isVideo ? "Video call" : "Audio call"}
             </span>
           </div>
           <span className="text-sm opacity-90">Click to join call</span>
@@ -564,12 +688,19 @@ export default function ChatView({
     const { type, sender, content } = c.lastMessage;
 
     if (type === "notification") {
-      return sender.userId === userId
-        ? `You ${content}`
-        : `${sender.fullName} ${content}`;
+      if (sender.userId === userId) {
+        return `You ${content}`;
+      } else {
+        return sender.fullName ? `${sender.fullName} ${content}` : content;
+      }
     }
 
-    if (type === "text") return content;
+    if (type === "text") {
+      if (sender.userId === userId) {return `You: ${content}`;
+      } else {
+        return `${sender.fullName}: ${content}`;
+      }
+    }
     if (type === "video_call")
       return `${sender.fullName} started a video call`;
     if (type === "audio_call")
@@ -638,7 +769,9 @@ export default function ChatView({
   return (
     <div className="flex flex-1 overflow-hidden">
       {/* Sidebar */}
-      <aside className="w-64 bg-gray-100 border-r overflow-y-auto">
+      <aside className="w-96 bg-gray-100 border-r overflow-y-auto overflow-x-hidden"
+        onScroll={handleSidebarScroll}
+      >
         <button
           onClick={() => setShowNewGroupModal(true)}
           className="w-full py-2 px-4 bg-blue-500 text-white rounded hover:bg-blue-600 mb-2 flex items-center justify-center gap-2"
@@ -946,6 +1079,31 @@ export default function ChatView({
                   onChange={(e) => handleSelectFiles(e.target.files)}
                 />
               </label>
+              {/* Nút micro ghi âm */}
+              <button
+                type="button"
+                onClick={handleToggleRecording}
+                className={`p-1 rounded-full transition-colors duration-200 ${
+                  isRecording
+                    ? "bg-red-500 text-white hover:bg-red-600" 
+                    : "text-gray-600"  
+                }`}
+                title={isRecording ? "Stop recording" : "Record voice message"}
+              >
+                {isRecording ? (
+                  // icon Stop
+                  <Square className="w-6 h-6" />
+                ) : (
+                  // icon Microphone
+                  <Mic className="w-6 h-6" />
+                )}
+              </button>
+
+              {isRecording && (
+                <span className="text-sm text-red-600 ml-1 animate-pulse">
+                  ● Recording... {recordDuration}s
+                </span>
+              )}
               <input
                 type="text"
                 className="flex-1 border rounded-2xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -975,7 +1133,6 @@ export default function ChatView({
           friends={friends}
           onClose={() => setShowNewGroupModal(false)}
           onCreated={(conv) => {
-            setConversations((prev) => [conv, ...prev]);
             setSelectedConversation(conv.id);
           }}
         />

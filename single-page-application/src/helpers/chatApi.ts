@@ -68,11 +68,15 @@ export interface ConversationCreateRequest {
 
 // --- APIs ---
 
-// Lấy danh sách conversations
+// Lấy danh sách conversations có phân trang
 export async function fetchConversations(
-  userId: string
+  userId: string,
+  page = 0,
+  size = 20
 ): Promise<ConversationResponse[]> {
-  const res = await api.get(`/chat/conversations/user/${userId}`);
+  const res = await api.get(
+    `/chat/conversations/user/${userId}?page=${page}&size=${size}`
+  );
   return res.data as ConversationResponse[];
 }
 

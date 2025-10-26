@@ -44,19 +44,28 @@ export default function NewGroupModal({
   const [name, setName] = useState("");
   const [selected, setSelected] = useState<string[]>([]);
   const [search, setSearch] = useState("");
+  const [errors, setErrors] = useState<{ name?: string; members?: string }>({}); // <-- thêm
   const navigate = useNavigate();
 
   const handleToggleUser = (id: string) => {
     setSelected((prev) =>
       prev.includes(id) ? prev.filter((u) => u !== id) : [...prev, id]
     );
+    setErrors((prev) => ({ ...prev, members: undefined })); // xóa lỗi khi chọn
   };
 
   const handleCreate = async () => {
-    if (!name.trim() || selected.length === 0) return;
+    const newErrors: typeof errors = {};
+    if (!name.trim()) newErrors.name = "Group name is required";
+    if (selected.length === 0) newErrors.members = "Please add at least one member";
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
 
     try {
-      // 🧠 Lấy thông tin user hiện tại (phải chờ)
+      // 🧠 Lấy thông tin user hiện tại
       const token = localStorage.getItem("refreshToken");
       const userId = localStorage.getItem("userId");
 
@@ -66,7 +75,7 @@ export default function NewGroupModal({
         return;
       }
 
-      const data = await fetchUserById(userId); // ✅ await ở đây
+      const data = await fetchUserById(userId);
 
       const members = [
         {
@@ -110,13 +119,23 @@ export default function NewGroupModal({
         <h2 className="font-bold mb-2 flex items-center gap-2">
           <Users className="w-5 h-5" /> New Group
         </h2>
+
+        {/* Group name input */}
         <input
           type="text"
           placeholder="Group name"
           value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="border p-1 w-full mb-2"
+          onChange={(e) => {
+            setName(e.target.value);
+            setErrors((prev) => ({ ...prev, name: undefined })); // xóa lỗi khi nhập
+          }}
+          className="border p-1 w-full mb-1"
         />
+        {errors.name && (
+          <div className="text-red-600 text-sm mb-2">{errors.name}</div>
+        )}
+
+        {/* Search input */}
         <input
           type="text"
           placeholder="Search friends..."
@@ -124,7 +143,9 @@ export default function NewGroupModal({
           onChange={(e) => setSearch(e.target.value)}
           className="border p-1 w-full mb-2"
         />
-        <div className="max-h-40 overflow-y-auto mb-2 border p-1">
+
+        {/* Friends list */}
+        <div className="max-h-40 overflow-y-auto mb-1 border p-1">
           {filteredFriends.map((f) => (
             <div key={f.id} className="flex items-center gap-2 mb-1">
               <input
@@ -146,6 +167,11 @@ export default function NewGroupModal({
             </div>
           )}
         </div>
+        {errors.members && (
+          <div className="text-red-600 text-sm mb-2">{errors.members}</div>
+        )}
+
+        {/* Buttons */}
         <div className="flex justify-end gap-2">
           <button onClick={onClose} className="px-2 py-1 border rounded">
             Cancel

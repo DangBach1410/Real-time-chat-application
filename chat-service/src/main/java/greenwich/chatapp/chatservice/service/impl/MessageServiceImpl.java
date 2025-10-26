@@ -233,6 +233,12 @@ public class MessageServiceImpl implements MessageService {
         conversation.setLastMessage(lastMessage);
         conversation.setLastMessageAt(createdAt);
         conversationRepository.save(conversation);
+
+        // send it to members in conversation
+        conversation.getMembers().forEach(member -> {
+            String destination = "/topic/conversations/user/" + member.getUserId();
+            messagingTemplate.convertAndSend(destination, conversation);
+        });
     }
 
     @Override

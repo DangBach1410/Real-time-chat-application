@@ -23,11 +23,13 @@ import org.springframework.data.mongodb.core.query.Query;
 import org.springframework.data.mongodb.core.query.Criteria;
 import org.springframework.data.mongodb.core.query.Update;
 import org.springframework.http.ResponseEntity;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -41,6 +43,7 @@ public class ConversationServiceImpl implements ConversationService {
     private final ModelMapper modelMapper;
     private final MongoTemplate mongoTemplate;
     private final MediaServiceClient mediaServiceClient;
+    private final SimpMessagingTemplate messagingTemplate;
 
     @Override
     @Async("taskExecutor")
@@ -188,6 +191,7 @@ public class ConversationServiceImpl implements ConversationService {
         ConversationEntity conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new RuntimeException("Conversation not found"));
 
+        List<String> newlyAddedUserIds = new ArrayList<>();
         if (request.getMembers() != null && !request.getMembers().isEmpty()) {
             for (ConversationAddMemberRequest.MemberRequest m : request.getMembers()) {
                 MemberEntity newMember = MemberEntity.builder()
@@ -198,6 +202,7 @@ public class ConversationServiceImpl implements ConversationService {
                         .joinedAt(LocalDateTime.now())
                         .build();
                 conversation.getMembers().add(newMember);
+                newlyAddedUserIds.add(m.getUserId());
 
                 // 🔥 Gửi notification message cho việc thêm thành viên
                 MessageCreateRequest notificationRequest = MessageCreateRequest.builder()
@@ -213,7 +218,17 @@ public class ConversationServiceImpl implements ConversationService {
             }
         }
 
-        ConversationEntity updated = conversationRepository.save(conversation);
+        // lấy lại conversation mới nhất sau khi cập nhật last message
+        ConversationEntity newConversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new RuntimeException("Conversation not found"));
+
+        newConversation.setMembers(conversation.getMembers());
+        ConversationEntity updated = conversationRepository.save(newConversation);
+        // Gửi cập nhật conversation cho các thành viên mới được thêm
+        for (String userId : newlyAddedUserIds) {
+            String destination = "/topic/conversations/user/" + userId;
+            messagingTemplate.convertAndSend(destination, updated); // gửi conversation đã cập nhật
+        }
         return ResponseEntity.ok(modelMapper.map(updated, ConversationResponse.class));
     }
 
@@ -231,7 +246,7 @@ public class ConversationServiceImpl implements ConversationService {
 
         ConversationEntity updated = conversationRepository.save(conversation);
 
-        // 🔥 Gửi notification message cho việc rời nhóm
+        // Gửi notification message cho việc rời nhóm
         MessageCreateRequest notificationRequest = MessageCreateRequest.builder()
                 .conversationId(conversationId)
                 .senderId(userId)
@@ -242,6 +257,12 @@ public class ConversationServiceImpl implements ConversationService {
                 .build();
 
         messageService.createNotificationMessage(notificationRequest);
+
+        // Gửi cập nhật conversation cho thành viên bị xoá
+        ConversationEntity newConversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new RuntimeException("Conversation not found"));
+        String destination = "/topic/conversations/user/" + userId;
+        messagingTemplate.convertAndSend(destination, newConversation);
 
         return ResponseEntity.ok(modelMapper.map(updated, ConversationResponse.class));
     }
