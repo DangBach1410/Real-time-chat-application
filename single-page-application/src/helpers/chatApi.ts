@@ -38,7 +38,7 @@ export interface MessageResponse {
   id: string;
   conversationId: string;
   sender: MemberResponse;
-  type: "text" | "link" | "media" | "notification" | "video_call" | "audio_call";
+  type: "text" | "link" | "media" | "notification" | "video_call" | "audio_call" | "text-translation";
   content: string; // với media là JSON string chứa metadata
   createdAt: string;
 }

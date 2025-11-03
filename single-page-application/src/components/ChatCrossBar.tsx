@@ -16,8 +16,7 @@ interface ChatCrossBarProps {
   conversation: ConversationResponse;
   currentUserId: string;
   lastSeen?: number | null;
-  onVoiceCall?: () => void;
-  onVideoCall?: () => void;
+  usersPresence: Record<string, number>;
   onConversationUpdated?: (updated: ConversationResponse) => void;
 }
 
@@ -25,11 +24,22 @@ export default function ChatCrossBar({
   conversation,
   currentUserId,
   lastSeen,
-  // onVoiceCall,
-  // onVideoCall,
+  usersPresence,
   onConversationUpdated,
 }: ChatCrossBarProps) {
   const [detailsModalOpen, setDetailsModalOpen] = useState(false);
+
+  function isGroupOnline(group: ConversationResponse, currentUserId: string, usersPresence: Record<string, number>): boolean {
+    return group.members.some(member => 
+      member.userId !== currentUserId && // loại bỏ chính user
+      (() => {
+        const lastSeen = usersPresence[member.userId];
+        if (!lastSeen) return false;
+        const diffMinutes = (Date.now() - lastSeen) / 60000;
+        return diffMinutes <= 5; // online nếu < 5 phút
+      })()
+    );
+  }
 
   const isPrivate = conversation.type === "private";
   const otherUser = isPrivate
@@ -51,7 +61,18 @@ export default function ChatCrossBar({
     lastSeen !== undefined && lastSeen !== null
       ? Math.floor((Date.now() - lastSeen) / 60000)
       : null;
-  const isOnline = diffMinutes !== null && diffMinutes <= 5;
+  
+  const isOnline = conversation.type === "group" 
+    ? isGroupOnline(conversation, currentUserId, usersPresence)
+    : diffMinutes !== null && diffMinutes <= 5;
+
+  const statusText = isOnline
+    ? "Online"
+    : isPrivate
+    ? diffMinutes !== null
+      ? `Active ${diffMinutes} minutes ago`
+      : "Offline"
+    : "Offline"; // group offline
 
   const openCall = async (type: "audio" | "video") => {
     try {
@@ -126,32 +147,16 @@ export default function ChatCrossBar({
             />
           )}
 
-          {isPrivate && otherUser && (
-            <span
-              className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${
-                isOnline ? "bg-green-500" : "bg-gray-400"
-              }`}
-              title={
-                isOnline
-                  ? "Online"
-                  : diffMinutes !== null
-                  ? `Active ${diffMinutes} minutes ago`
-                  : "Offline"
-              }
-            />
-          )}
+          <span
+            className={`absolute bottom-0 right-0 w-3 h-3 rounded-full ${
+              isOnline ? "bg-green-500" : ""
+            }`}
+            title={statusText}
+          />
         </div>
         <div className="flex flex-col">
           <div className="font-medium">{displayName}</div>
-          {lastSeen !== undefined && (
-            <div className="text-xs text-gray-500">
-              {isOnline
-                ? "Online"
-                : diffMinutes !== null
-                ? `Active ${diffMinutes} minutes ago`
-                : "Offline"}
-            </div>
-          )}
+          <div className="text-xs text-gray-500">{statusText}</div>
         </div>
       </div>
 

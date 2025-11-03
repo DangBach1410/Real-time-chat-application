@@ -25,6 +25,9 @@ public class GatewayConfig {
                 .route("presence-service", r -> r.path("/api/v1/presence/**")
                         .filters(f -> f.filter(authenticationFilter))
                         .uri("lb://presence-service"))
+                .route("translation-service", r -> r.path("/api/v1/translate/**")
+                        .filters(f -> f.filter(authenticationFilter))
+                        .uri("lb://translation-service"))
                 .build();
     }
 }

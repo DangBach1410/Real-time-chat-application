@@ -1,5 +1,7 @@
 // src/components/ChatView.tsx
 import { useEffect, useRef, useState } from "react";
+import { Globe } from "lucide-react"; // icon dịch
+import { translateMessage } from "../helpers/translationApi"; // API helper mới
 import * as StompJs from "@stomp/stompjs";
 import SockJS from "sockjs-client";
 import {
@@ -16,9 +18,11 @@ import { FileText, Paperclip, Send } from "lucide-react";
 import ChatCrossBar from "./ChatCrossBar";
 import NewGroupModal from "./NewGroupModal";
 import { getFriends, type GetFriendResponse } from "../helpers/friendApi";
-import { Users } from "lucide-react";
+import { Users, Smile } from "lucide-react";
 import { Phone, Video } from "lucide-react"
 import { Mic, Square } from "lucide-react";
+import Picker from "@emoji-mart/react";
+import data from "@emoji-mart/data";
 
 interface ChatViewProps {
   userId: string;
@@ -68,11 +72,40 @@ export default function ChatView({
   const [isRecording, setIsRecording] = useState(false);
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const stompClient = useRef<StompJs.Client | null>(null);
   const [recordDuration, setRecordDuration] = useState(0);
+  const emojiPickerRef = useRef<HTMLDivElement | null>(null);
+  const buttonRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (
+        buttonRef.current?.contains(event.target as Node)
+      ) {
+        return; 
+      }
+      if (
+        emojiPickerRef.current &&
+        !emojiPickerRef.current.contains(event.target as Node)
+      ) {
+        setShowEmojiPicker(false);
+      }
+    };
+
+    if (showEmojiPicker) {
+      document.addEventListener("mousedown", handleClickOutside);
+    } else {
+      document.removeEventListener("mousedown", handleClickOutside);
+    }
+
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [showEmojiPicker]);
 
   useEffect(() => {
     if (!isRecording || !recordingStartTime) return;
@@ -398,6 +431,28 @@ export default function ChatView({
     }
   };
 
+  const handleTranslation = async (m: MessageResponse) => {
+    try {
+      // nếu đã có rồi thì không gọi API
+      const translatedExists = messages.some((msg) => msg.id === `${m.id}-translated`);
+      if (translatedExists) return;
+
+      const translated = await translateMessage(m, "en");
+
+      setMessages((prev) => {
+        const index = prev.findIndex((msg) => msg.id === m.id);
+        if (index === -1) return prev;
+
+        const newMessages = [...prev];
+          newMessages.splice(index + 1, 0, translated);
+          return newMessages;
+      });
+    } catch (err) {
+        console.error("Translation failed:", err);
+    }
+  };
+      
+
   // thêm phía dưới cùng của các hàm handle khác
   const handleToggleRecording = async () => {
     if (isRecording) {
@@ -560,8 +615,23 @@ export default function ChatView({
   );
 
   // render message content
-  const renderContent = (m: MessageResponse) => {
+  const renderContent = (m: MessageResponse, isOwn: boolean) => {
     if (m.type === "text") return <div>{m.content}</div>;
+    if (m.type === "text-translation") {
+      return (
+        <div className="flex flex-col">
+          <div>{m.content}</div>
+            <div
+              className={`
+                text-[11px] italic font-medium mt-1 self-end
+                ${isOwn ? "text-gray-100 opacity-90" : "text-gray-600"}
+              `}
+            >
+              Google Translate
+            </div>
+        </div>
+      );
+    }
     if (m.type === "video_call" || m.type === "audio_call") {
       const isVideo = m.type === "video_call";
       return (
@@ -766,6 +836,18 @@ export default function ChatView({
     }, 2000); // sau 2s không gõ thì coi như đã dừng
   };
 
+  function isGroupOnline(group: ConversationResponse, currentUserId: string, usersPresence: Record<string, number>): boolean {
+    return group.members.some(member => 
+      member.userId !== currentUserId && // loại bỏ chính user
+      (() => {
+        const lastSeen = usersPresence[member.userId];
+        if (!lastSeen) return false;
+        const diffMinutes = (Date.now() - lastSeen) / 60000;
+        return diffMinutes <= 5; // online nếu < 5 phút
+      })()
+    );
+  }
+
   return (
     <div className="flex flex-1 overflow-hidden">
       {/* Sidebar */}
@@ -805,7 +887,9 @@ export default function ChatView({
           const diffMinutes = lastSeen
             ? Math.floor((Date.now() - lastSeen) / 60000)
             : null;
-          const isOnline = diffMinutes !== null && diffMinutes <= 5;
+          const isOnline = c.type === "group" 
+            ? isGroupOnline(c, userId, usersPresence)
+            : diffMinutes !== null && diffMinutes <= 5;
 
           return (
             <div
@@ -850,20 +934,23 @@ export default function ChatView({
                     }
                   />
                 )}
-                {presenceId && (
-                  <span
-                    className={`absolute bottom-0 right-0 w-3 h-3 rounded-full border-2 border-white ${
-                      isOnline ? "bg-green-500" : "bg-gray-400"
-                    }`}
-                    title={
-                      isOnline
+                {/* Hiển thị trạng thái online/offline */}
+                <span
+                  className={`absolute bottom-0 right-0 w-3 h-3 rounded-full ${
+                    isOnline ? "bg-green-500" : ""
+                  }`}
+                  title={
+                    c.type === "group"
+                      ? isOnline
                         ? "Online"
-                        : lastSeen !== null
-                        ? `Active ${diffMinutes} minutes ago`
                         : "Offline"
-                    }
-                  />
-                )}
+                      : lastSeen !== null
+                      ? isOnline
+                        ? "Online"
+                        : `Active ${diffMinutes} minutes ago`
+                      : "Offline"
+                  }
+                />
               </div>
               <div className="flex-1">
                 <div className="font-medium">{displayName}</div>
@@ -891,8 +978,7 @@ export default function ChatView({
                   return other ? usersPresence[other.userId] : null;
                 })()
               }
-              onVoiceCall={() => alert("Voice call not implemented")}
-              onVideoCall={() => alert("Video call not implemented")}
+              usersPresence={usersPresence}
               onConversationUpdated={handleConversationUpdated}
             />
             <div
@@ -919,110 +1005,113 @@ export default function ChatView({
                     </div>
                   );
                 }
-                return (
-                  <div
-                    key={m.id}
-                    className={`flex ${
-                      isOwn ? "justify-end" : "justify-start"
-                    } mb-0.5`}
-                  >
-                  {!isOwn && (
-                    <div className="flex items-end gap-2">
-                      {isLastInGroup ? (
-                        <img
-                          src={m.sender.imageUrl || DEFAULT_AVATAR}
-                          alt={m.sender.fullName}
-                          className="w-8 h-8 rounded-full"
-                          onError={(e) =>
-                            ((e.currentTarget as HTMLImageElement).src = DEFAULT_AVATAR)
-                          }
-                        />
-                      ) : (
-                        <div className="w-8" />
-                      )}
-                      <div className="flex flex-col items-start">
-                        {isFirstInGroup && (
-                          <span className="text-xs text-gray-500 mb-1">
-                            {m.sender.fullName}
-                          </span>
-                        )}
-                        {m.type === "video_call" || m.type === "audio_call" ? (
-                          // ① Call message
-                          renderContent(m)
-                        ) : m.type === "link" ? (
-                          // ② Link message
-                          renderContent(m)
-                        ) : (
-                          // ③ Normal message bubble
-                          <div
-                            className={`${
-                              m.type === "media" &&
-                              (() => {
-                                try {
-                                  const { mediaType } = JSON.parse(m.content);
-                                  return ["image", "video", "audio"].includes(mediaType);
-                                } catch {
-                                  return false;
-                                }
-                              })()
-                                ? "" // media thì không bọc bubble
-                                : "bg-gray-100 rounded-2xl px-3 py-2 max-w-xs whitespace-pre-wrap break-words"
-                            }`}
-                          >
-                            {renderContent(m)}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
 
-                  {isOwn && (
-                    <div className="flex items-end gap-2">
-                      <div className="flex flex-col items-end">
-                      {m.type === "video_call" || m.type === "audio_call" ? (
-                        // ① Cuộc gọi
-                        renderContent(m)
-                      ) : m.type === "link" ? (
-                        // ② Link
-                        renderContent(m)
-                      ) : (
-                        // ③ Tin nhắn thường
-                        <div
-                          className={`${
-                            m.type === "media" &&
-                            (() => {
-                              try {
-                                const { mediaType } = JSON.parse(m.content);
-                                return ["image", "video", "audio"].includes(mediaType);
-                              } catch {
-                                return false;
-                              }
-                            })()
-                              ? "" // media thì không bọc bubble
-                              : "bg-blue-500 text-white rounded-2xl px-3 py-2 max-w-xs whitespace-pre-wrap break-words"
-                          }`}
-                        >
-                          {renderContent(m)}
+                return (
+                  <div key={m.id} className={`flex ${isOwn ? "justify-end" : "justify-start"} mb-0.5`}>
+                    {!isOwn && (
+                      <div className="flex items-end gap-2">
+                        {isLastInGroup ? (
+                          <img
+                            src={m.sender.imageUrl || DEFAULT_AVATAR}
+                            alt={m.sender.fullName}
+                            className="w-8 h-8 rounded-full"
+                            onError={(e) =>
+                              ((e.currentTarget as HTMLImageElement).src = DEFAULT_AVATAR)
+                            }
+                          />
+                        ) : (
+                          <div className="w-8" />
+                        )}
+
+                        <div className="flex flex-col items-start relative group">
+                          {isFirstInGroup && (
+                            <span className="text-xs text-gray-500 mb-1">{m.sender.fullName}</span>
+                          )}
+
+                          {/* ✅ Bọc thêm một div flex để đặt bubble và Globe cùng hàng */}
+                          <div className="flex items-center gap-1">
+                            {m.type === "video_call" || m.type === "audio_call" ? (
+                              renderContent(m, isOwn)
+                            ) : m.type === "link" ? (
+                              renderContent(m, isOwn)
+                            ) : (
+                              <div
+                                className={`${
+                                  m.type === "media" &&
+                                  (() => {
+                                    try {
+                                      const { mediaType } = JSON.parse(m.content);
+                                      return ["image", "video", "audio"].includes(mediaType);
+                                    } catch {
+                                      return false;
+                                    }
+                                  })()
+                                    ? ""
+                                    : "bg-gray-100 rounded-2xl px-3 py-2 max-w-xs whitespace-pre-wrap break-words"
+                                }`}
+                              >
+                                {renderContent(m, isOwn)}
+                              </div>
+                            )}
+
+                            {m.type === "text" && (
+                              <button
+                                className="text-gray-400 hover:text-gray-700 opacity-0 group-hover:opacity-100 transition"
+                                onClick={() => handleTranslation(m)}
+                              >
+                                <Globe className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
                         </div>
-                      )}
                       </div>
-                      {/* {isLastInGroup ? (
-                        <img
-                          src={userAvatar || DEFAULT_AVATAR}
-                          alt={userName}
-                          className="w-8 h-8 rounded-full"
-                          onError={(e) =>
-                            ((e.currentTarget as HTMLImageElement).src = DEFAULT_AVATAR)
-                          }
-                        />
-                      ) : (
-                        <div className="w-8" />
-                      )} */}
-                    </div>
-                  )}
+                    )}
+
+
+                    {isOwn && (
+                      <div className="flex items-end gap-2">
+                        <div className="flex flex-col items-end relative group">
+                          {m.type === "video_call" || m.type === "audio_call" ? (
+                            renderContent(m, isOwn)
+                          ) : m.type === "link" ? (
+                            renderContent(m, isOwn)
+                          ) : (
+                            <div
+                              className={`${
+                                m.type === "media" &&
+                                (() => {
+                                  try {
+                                    const { mediaType } = JSON.parse(m.content);
+                                    return ["image", "video", "audio"].includes(mediaType);
+                                  } catch {
+                                    return false;
+                                  }
+                                })()
+                                  ? ""
+                                  : "bg-blue-500 text-white rounded-2xl px-3 py-2 max-w-xs whitespace-pre-wrap break-words"
+                              }`}
+                            >
+                              {renderContent(m, isOwn)}
+                            </div>
+                          )}
+                          {m.type === "text" && (
+                            <button
+                              className={`absolute top-1/2 -translate-y-1/2 
+                                -left-5
+                                opacity-0 group-hover:opacity-100 
+                                text-gray-400 hover:text-gray-700`}
+                                onClick={() => handleTranslation(m)}
+                            >
+                              <Globe className="w-4 h-4" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
+
               <div ref={messagesEndRef} />
             </div>
 
@@ -1104,6 +1193,26 @@ export default function ChatView({
                   ● Recording... {recordDuration}s
                 </span>
               )}
+                
+                <button
+                  type="button"
+                  ref={buttonRef}
+                  onClick={() => setShowEmojiPicker(prev => !prev)}
+                  className="p-2 text-gray-500"
+                >
+                  <Smile className="w-5 h-5 text-gray-600" />
+                </button>
+
+                {showEmojiPicker && (
+                  <div ref={emojiPickerRef} className="absolute bottom-16 left-4 z-50">
+                    <Picker
+                      data={data}
+                      onEmojiSelect={(emoji: any) => {
+                        setNewMessage(prev => prev + emoji.native);
+                      }}
+                    />
+                  </div>
+                )}
               <input
                 type="text"
                 className="flex-1 border rounded-2xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
