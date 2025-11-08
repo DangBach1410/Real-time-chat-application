@@ -71,6 +71,7 @@ export default function ChangePassword({ userId }: ChangePasswordProps) {
 
       <form onSubmit={handleSubmit} className="space-y-4 w-full max-w-md">
         {/* Old Password */}
+        <label className="block mb-1 font-semibold">Old Password</label>
         <div className="relative">
           <input
             type={showOld ? "text" : "password"}
@@ -91,6 +92,7 @@ export default function ChangePassword({ userId }: ChangePasswordProps) {
         </div>
 
         {/* New Password */}
+        <label className="block mb-1 font-semibold">New Password</label>
         <div className="relative">
           <input
             type={showNew ? "text" : "password"}
@@ -111,6 +113,7 @@ export default function ChangePassword({ userId }: ChangePasswordProps) {
         </div>
 
         {/* Confirm Password */}
+        <label className="block mb-1 font-semibold">Confirm New Password</label>
         <div className="relative">
           <input
             type={showConfirm ? "text" : "password"}

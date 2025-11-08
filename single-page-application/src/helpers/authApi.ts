@@ -43,6 +43,8 @@ export interface UpdateRequest {
   firstName: string;
   lastName: string;
   email: string;
+  language?: string;
+  languageCode?: string;
 }
 
 export interface UserResponse {
@@ -51,6 +53,11 @@ export interface UserResponse {
   fullName?: string;
   email?: string;
   imageUrl?: string;
+  provider?: "google" | "github";
+  firstName?: string;
+  lastName?: string;
+  language?: string;
+  languageCode?: string;
 }
 
 export const updateUser = (userId: string, data: UpdateRequest) => {

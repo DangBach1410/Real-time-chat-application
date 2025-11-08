@@ -8,7 +8,8 @@ interface ConfirmModalProps {
 export default function ConfirmModal({ title, message, onConfirm, onCancel }: ConfirmModalProps) {
   return (
     <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
-      <div className="bg-white rounded-lg shadow-lg p-4 w-80">
+      <div className="bg-white rounded-lg shadow-lg p-4 
+                w-11/12 max-w-md sm:max-w-lg md:max-w-xl">
         {title && <h2 className="text-lg font-semibold mb-2">{title}</h2>}
         <p className="text-gray-700 mb-4">{message}</p>
         <div className="flex justify-end gap-2">

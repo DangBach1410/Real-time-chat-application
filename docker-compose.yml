@@ -157,7 +157,10 @@ services:
     depends_on:
       - service-registry
     environment:
-      GOOGLE_TRANSLATE_API_KEY: ${GOOGLE_TRANSLATE_API_KEY}
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS}
+      GOOGLE_PROJECT_ID: ${GOOGLE_PROJECT_ID}
+    volumes:
+      - ./translation-service/credentials/translate-key.json:/app/credentials/translate-key.json:ro
     restart: unless-stopped
     networks:
       - chatapp-network

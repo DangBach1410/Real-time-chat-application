@@ -16,4 +16,6 @@ public class UserResponse {
     private String email;
     private String imageUrl;
     private AuthProvider provider;
+    private String language;
+    private String languageCode;
 }

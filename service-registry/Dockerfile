@@ -1,5 +1,5 @@
 # Sử dụng image cơ sở Java
-FROM openjdk:17-jdk
+FROM eclipse-temurin:17-jdk
 
 # Thông tin tác giả
 LABEL authors="bachtd"

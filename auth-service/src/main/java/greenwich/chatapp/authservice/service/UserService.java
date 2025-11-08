@@ -105,6 +105,8 @@ public class UserService {
                 .email(user.getEmail())
                 .imageUrl(user.getImageUrl())
                 .provider(user.getProvider())
+                .language(user.getLanguage())
+                .languageCode(user.getLanguageCode())
                 .build();
     }
 
@@ -134,6 +136,8 @@ public class UserService {
             user.setFullName(fullName);
             user.setEmail(request.getEmail());
             user.setSearchFullName(UnicodeUtils.toSearchable(fullName));
+            user.setLanguage(request.getLanguage());
+            user.setLanguageCode(request.getLanguageCode());
 
             userRepository.save(user);
             friendAsyncService.updateFriendsAndRequestsInBackground(id, fullName, user.getImageUrl());

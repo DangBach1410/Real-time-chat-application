@@ -4,6 +4,7 @@ import { Globe } from "lucide-react"; // icon dịch
 import { translateMessage } from "../helpers/translationApi"; // API helper mới
 import * as StompJs from "@stomp/stompjs";
 import SockJS from "sockjs-client";
+import ConfirmModal from "./ConfirmModal";
 import {
   fetchConversations,
   fetchMessages,
@@ -23,11 +24,13 @@ import { Phone, Video } from "lucide-react"
 import { Mic, Square } from "lucide-react";
 import Picker from "@emoji-mart/react";
 import data from "@emoji-mart/data";
+import { useNavigate } from "react-router-dom";
 
 interface ChatViewProps {
   userId: string;
   userName: string;
   userAvatar: string;
+  userLanguageCode?: string;
 }
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
@@ -47,6 +50,7 @@ export default function ChatView({
   userId,
   userName,
   userAvatar,
+  userLanguageCode,
 }: ChatViewProps) {
   const [conversations, setConversations] = useState<ConversationResponse[]>(
     []
@@ -73,13 +77,17 @@ export default function ChatView({
   const [mediaRecorder, setMediaRecorder] = useState<MediaRecorder | null>(null);
   const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-
+  const [showConfirmModal, setShowConfirmModal] = useState(false);
+  
+  const pendingNavigationRef = useRef<(() => void) | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
   const stompClient = useRef<StompJs.Client | null>(null);
   const [recordDuration, setRecordDuration] = useState(0);
   const emojiPickerRef = useRef<HTMLDivElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
+
+  const navigate = useNavigate();
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -433,22 +441,31 @@ export default function ChatView({
 
   const handleTranslation = async (m: MessageResponse) => {
     try {
-      // nếu đã có rồi thì không gọi API
+      // nếu chưa có userLanguageCode thì show modal
+      if (!userLanguageCode) {
+        pendingNavigationRef.current = () => {
+          navigate("/profile/edit");
+        };
+        setShowConfirmModal(true);
+        return;
+      }
+
+      // nếu đã dịch rồi thì không gọi API
       const translatedExists = messages.some((msg) => msg.id === `${m.id}-translated`);
       if (translatedExists) return;
 
-      const translated = await translateMessage(m, "en");
+      const translated = await translateMessage(m, userLanguageCode);
 
       setMessages((prev) => {
         const index = prev.findIndex((msg) => msg.id === m.id);
         if (index === -1) return prev;
 
         const newMessages = [...prev];
-          newMessages.splice(index + 1, 0, translated);
-          return newMessages;
+        newMessages.splice(index + 1, 0, translated);
+        return newMessages;
       });
     } catch (err) {
-        console.error("Translation failed:", err);
+      console.error("Translation failed:", err);
     }
   };
       
@@ -1243,6 +1260,21 @@ export default function ChatView({
           onClose={() => setShowNewGroupModal(false)}
           onCreated={(conv) => {
             setSelectedConversation(conv.id);
+          }}
+        />
+      )}
+      {showConfirmModal && (
+        <ConfirmModal
+          title="Language not set"
+          message="You need to set your preferred language before translating. Do you want to update your profile now?"
+          onCancel={() => {
+            setShowConfirmModal(false);
+            pendingNavigationRef.current = null;
+          }}
+          onConfirm={() => {
+            setShowConfirmModal(false);
+            pendingNavigationRef.current?.();
+            pendingNavigationRef.current = null;
           }}
         />
       )}

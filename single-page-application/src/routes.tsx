@@ -27,6 +27,7 @@ function ChatPage() {
       userId={currentUserId}
       userName={user.fullName}
       userAvatar={user.imageUrl}
+      userLanguageCode={user.languageCode}
     />
   );
 }
@@ -62,6 +63,8 @@ function EditProfilePage() {
       firstName={user.firstName}
       lastName={user.lastName}
       email={user.email}
+      language={user.language}
+      languageCode={user.languageCode}
     />
   );
 }

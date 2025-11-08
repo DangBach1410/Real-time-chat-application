@@ -31,6 +31,8 @@ public class UserEntity implements UserDetails {
     private AuthProvider provider;
     private String providerId;
     private String imageUrl;
+    private String language;
+    private String languageCode;
 
     // 🔹 Chỉ cần cho fullName
     private String searchFullName;

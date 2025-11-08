@@ -51,3 +51,6 @@ minio/data/
 # === Other ===
 /tmp/
 *.gz
+
+# Google Cloud service account keys
+**/credentials/*.json

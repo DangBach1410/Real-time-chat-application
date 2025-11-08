@@ -9,6 +9,8 @@ export interface UserResponse {
   email: string;
   imageUrl: string;
   provider: "google" | "github"; // thêm provider
+  language?: string;
+  languageCode?: string;
 }
 
 // Hàm gọi API lấy user theo id
