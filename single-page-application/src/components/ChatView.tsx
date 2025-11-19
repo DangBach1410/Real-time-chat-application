@@ -31,6 +31,7 @@ interface ChatViewProps {
   userName: string;
   userAvatar: string;
   userLanguageCode?: string;
+  conversationId?: string;
 }
 
 const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
@@ -51,6 +52,7 @@ export default function ChatView({
   userName,
   userAvatar,
   userLanguageCode,
+  conversationId,
 }: ChatViewProps) {
   const [conversations, setConversations] = useState<ConversationResponse[]>(
     []
@@ -88,6 +90,20 @@ export default function ChatView({
   const buttonRef = useRef<HTMLButtonElement | null>(null);
 
   const navigate = useNavigate();
+
+  // Khi props conversationId thay đổi, set selectedConversation
+  useEffect(() => {
+    if (conversationId && conversationId !== selectedConversation) {
+      setSelectedConversation(conversationId);
+    }
+  }, [conversationId]);
+
+  // Khi selectedConversation thay đổi, cập nhật URL
+  useEffect(() => {
+    if (selectedConversation) {
+      navigate(`/chat/${selectedConversation}`);
+    }
+  }, [selectedConversation, navigate]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -346,15 +362,6 @@ export default function ChatView({
     load();
   }, [selectedConversation]);
 
-  // scroll xuống cuối mỗi khi messages thay đổi
-  // useEffect(() => {
-  //   if (messages.length > 0) {
-  //     setTimeout(() => {
-  //       messagesEndRef.current?.scrollIntoView({ behavior: "auto" });
-  //     }, 100); // delay chút để DOM tính toán xong height
-  //   }
-  // }, [messages]);
-
   // auto clear error
   useEffect(() => {
     if (errorMsg) {
@@ -392,6 +399,8 @@ export default function ChatView({
       }
     });
   };
+
+  const currentConversation = conversations.find(c => c.id === selectedConversation);
 
   // scroll load more
   const handleScroll = async (e: React.UIEvent<HTMLDivElement>) => {
@@ -984,20 +993,22 @@ export default function ChatView({
       <main className="flex-1 flex flex-col bg-white">
         {selectedConversation ? (
           <>
-            <ChatCrossBar
-              conversation={conversations.find(c => c.id === selectedConversation)!}
-              currentUserId={userId}
-              lastSeen={
-                (() => {
-                  const conv = conversations.find(c => c.id === selectedConversation);
-                  if (!conv || conv.type === "group") return null;
-                  const other = conv.members.find((m) => m.userId !== userId);
-                  return other ? usersPresence[other.userId] : null;
-                })()
-              }
-              usersPresence={usersPresence}
-              onConversationUpdated={handleConversationUpdated}
-            />
+            {currentConversation && (
+              <ChatCrossBar
+                conversation={conversations.find(c => c.id === selectedConversation)!}
+                currentUserId={userId}
+                lastSeen={
+                  (() => {
+                    const conv = conversations.find(c => c.id === selectedConversation);
+                    if (!conv || conv.type === "group") return null;
+                    const other = conv.members.find((m) => m.userId !== userId);
+                    return other ? usersPresence[other.userId] : null;
+                  })()
+                }
+                usersPresence={usersPresence}
+                onConversationUpdated={handleConversationUpdated}
+              />
+            )}
             <div
               ref={scrollRef}
               className="flex-1 overflow-y-auto p-4 space-y-1"

@@ -104,4 +104,11 @@ public class ConversationController {
     ) {
         return conversationService.getLinks(conversationId, page, size);
     }
+
+    @GetMapping("/private")
+    public ResponseEntity<ConversationResponse> getPrivateConversation(
+            @RequestParam String currentUserId,
+            @RequestParam String otherUserId) {
+        return conversationService.getPrivateConversation(currentUserId, otherUserId);
+    }
 }

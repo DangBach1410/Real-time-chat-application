@@ -354,4 +354,15 @@ public class ConversationServiceImpl implements ConversationService {
                 .orElseThrow(() -> new RuntimeException("Conversation not found"));
         return modelMapper.map(conversation, ConversationResponse.class);
     }
+
+    @Override
+    public ResponseEntity<ConversationResponse> getPrivateConversation(String currentUserId, String otherUserId) {
+        Optional<ConversationEntity> conversation = conversationRepository.findPrivateConversation(currentUserId, otherUserId);
+
+        if (conversation.isEmpty()) {
+            throw new RuntimeException("Private conversation not found");
+        }
+
+        return ResponseEntity.ok(modelMapper.map(conversation.get(), ConversationResponse.class));
+    }
 }

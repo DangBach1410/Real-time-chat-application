@@ -13,7 +13,7 @@ import CallPage from './views/CallPage.tsx';
 
 import { useOutletContext } from "react-router-dom";
 import type { UserResponse } from "./helpers/userApi";
-
+import { useParams } from "react-router-dom";
 // Hook để lấy context
 type ChatContext = { user: UserResponse; keyword: string; currentUserId: string };
 function useChatContext() {
@@ -22,12 +22,14 @@ function useChatContext() {
 
 function ChatPage() {
   const { user, currentUserId } = useChatContext();
+  const { conversationId } = useParams();
   return (
     <ChatView
       userId={currentUserId}
       userName={user.fullName}
       userAvatar={user.imageUrl}
       userLanguageCode={user.languageCode}
+      conversationId={conversationId}  
     />
   );
 }
@@ -85,7 +87,7 @@ export default function AppRoutes() {
 
         {/* Layout bọc ngoài */}
         <Route element={<ChatLayout />}>
-          <Route path="/chat" element={<ChatPage />} />
+          <Route path="/chat/:conversationId?" element={<ChatPage />} />
           <Route path="/search" element={<SearchPage />} />
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/profile/friend-requests" element={<FriendRequestsPage />} />

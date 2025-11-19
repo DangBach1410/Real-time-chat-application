@@ -45,6 +45,9 @@ mongodb/mongo_data/
 # === MinIO ===
 minio/data/
 
+# === Redis ===
+redis/redis_data
+
 # === Workspace ===
 *.code-workspace
 

@@ -231,3 +231,15 @@ export async function updateConversationName(
   return res.data as ConversationResponse;
 }
 
+export async function getPrivateConversation(
+  currentUserId: string,
+  otherUserId: string
+): Promise<ConversationResponse> {
+  // Gọi endpoint backend để lấy conversation private
+  const res = await api.get<ConversationResponse>(
+    `/chat/conversations/private`,
+    { params: { currentUserId, otherUserId } }
+  );
+  return res.data;
+}
+

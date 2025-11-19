@@ -26,4 +26,6 @@ public interface ConversationService {
     ResponseEntity<ConversationResponse> updateNameOfConversation(String id, String userId, String userFullname, String name);
 
     ConversationResponse getConversation(String conversationId);
+
+    ResponseEntity<ConversationResponse> getPrivateConversation(String currentUserId, String otherUserId);
 }

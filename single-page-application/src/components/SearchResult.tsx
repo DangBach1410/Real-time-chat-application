@@ -13,6 +13,8 @@ import {
   ChatBubbleLeftIcon 
 } from "@heroicons/react/24/solid";
 import { DEFAULT_AVATAR } from "../constants/common";
+import { useNavigate } from "react-router-dom";
+import { getPrivateConversation } from "../helpers/chatApi";
 
 export default function SearchResults({
   currentUserId,
@@ -24,6 +26,7 @@ export default function SearchResults({
   const [results, setResults] = useState<SearchUserResponse[]>([]);
   const [page, setPage] = useState(0);
   const [hasMore, setHasMore] = useState(true);
+  const navigate = useNavigate();
 
   const fetchUsers = async (customPage?: number) => {
     const pageToFetch = customPage !== undefined ? customPage : page;
@@ -50,6 +53,15 @@ export default function SearchResults({
     fetchUsers(0);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [keyword]);
+
+  const goToChat = async (friendId: string) => {
+    try {
+      const conversation = await getPrivateConversation(currentUserId, friendId);
+      navigate(`/chat/${conversation.id}`);
+    } catch (err) {
+      console.error("Cannot navigate to chat:", err);
+    }
+  };
 
   const handleSendRequest = async (receiverId: string) => {
     try {
@@ -92,7 +104,9 @@ export default function SearchResults({
     switch (user.status) {
       case "FRIEND":
         return (
-          <button className={`${baseClasses} bg-green-600 hover:bg-green-700`}>
+          <button
+            onClick={() => goToChat(user.id)}
+            className={`${baseClasses} bg-green-600 hover:bg-green-700`}>
             <ChatBubbleLeftIcon className="w-5 h-5" />
             Message
           </button>

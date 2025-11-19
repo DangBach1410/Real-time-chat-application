@@ -4,9 +4,7 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import lombok.AllArgsConstructor;
-import lombok.Getter;
 
-@Getter
 @AllArgsConstructor
 public class RegisterRequest {
     @NotBlank(message = "Username must not be blank")
@@ -29,5 +27,12 @@ public class RegisterRequest {
     @NotBlank(message = "Role cannot be blank")
     @Pattern(regexp = "ADMIN|MANAGER|USER", message = "The role must be ADMIN, MANAGER or USER")
     private String role;
+
+    public String getEmail() { return email != null ? email.trim() : null; }
+    public String getUsername() { return username != null ? username.trim() : null; }
+    public String getPassword() { return password != null ? password.trim() : null; }
+    public String getFirstName() { return firstName != null ? firstName.trim() : null; }
+    public String getLastName() { return lastName != null ? lastName.trim() : null; }
+    public String getRole() { return role != null ? role.trim() : null; }
 }
 
