@@ -111,4 +111,13 @@ public class ConversationController {
             @RequestParam String otherUserId) {
         return conversationService.getPrivateConversation(currentUserId, otherUserId);
     }
+    @GetMapping("/search")
+    public ResponseEntity<List<ConversationResponse>> searchConversations(
+            @RequestParam String currentUserId,
+            @RequestParam String q,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) {
+        return conversationService.searchConversations(currentUserId, q, page, size);
+    }
 }

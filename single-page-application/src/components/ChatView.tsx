@@ -25,6 +25,7 @@ import { Mic, Square } from "lucide-react";
 import Picker from "@emoji-mart/react";
 import data from "@emoji-mart/data";
 import { useNavigate } from "react-router-dom";
+import { searchConversations } from "../helpers/chatApi";
 
 interface ChatViewProps {
   userId: string;
@@ -80,6 +81,11 @@ export default function ChatView({
   const [recordingStartTime, setRecordingStartTime] = useState<number | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<ConversationResponse[]>([]);
+  const [searchPage, setSearchPage] = useState(0);
+  const [searchHasMore, setSearchHasMore] = useState(true);
+  const [searchLoading, setSearchLoading] = useState(false);
   
   const pendingNavigationRef = useRef<(() => void) | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
@@ -90,6 +96,36 @@ export default function ChatView({
   const buttonRef = useRef<HTMLButtonElement | null>(null);
 
   const navigate = useNavigate();
+
+  useEffect(() => {
+    setSearchResults([]);
+    setSearchPage(0);
+    setSearchHasMore(true);
+
+    if (searchQuery.trim() === "") return;
+
+    const delayDebounce = setTimeout(() => {
+      loadSearchResults(0);
+    }, 300);
+
+    return () => clearTimeout(delayDebounce);
+  }, [searchQuery]);
+
+  const loadSearchResults = async (page: number) => {
+    if (!searchHasMore || searchLoading) return;
+    setSearchLoading(true);
+    try {
+      const res = await searchConversations(userId, searchQuery, page, PAGE_SIZE);
+      if (page === 0) setSearchResults(res);
+      else setSearchResults((prev) => [...prev, ...res]);
+      setSearchHasMore(res.length === PAGE_SIZE);
+      setSearchPage(page + 1);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSearchLoading(false);
+    }
+  };
 
   // Khi props conversationId thay đổi, set selectedConversation
   useEffect(() => {
@@ -430,10 +466,40 @@ export default function ChatView({
     }
   };
 
+  // const handleSidebarScroll = async (e: React.UIEvent<HTMLDivElement>) => {
+  //   const target = e.currentTarget;
+  //   const threshold = 50; // gần đáy
+  //   if (convHasMore && !loading && target.scrollHeight - target.scrollTop - target.clientHeight < threshold) {
+  //     setLoading(true);
+  //     try {
+  //       const more = await fetchConversations(userId, convPage, PAGE_SIZE);
+  //       setConversations((prev) => [...prev, ...more]);
+  //       setConvPage((prev) => prev + 1);
+  //       setConvHasMore(more.length === PAGE_SIZE);
+  //     } catch (err) {
+  //       console.error("Failed to load more conversations:", err);
+  //     } finally {
+  //       setLoading(false);
+  //     }
+  //   }
+  // };
   const handleSidebarScroll = async (e: React.UIEvent<HTMLDivElement>) => {
     const target = e.currentTarget;
     const threshold = 50; // gần đáy
-    if (convHasMore && !loading && target.scrollHeight - target.scrollTop - target.clientHeight < threshold) {
+    const nearBottom = target.scrollHeight - target.scrollTop - target.clientHeight < threshold;
+
+    if (!nearBottom) return;
+
+    // scroll search results
+    if (searchQuery.trim() !== "") {
+      if (searchHasMore && !searchLoading) {
+      loadSearchResults(searchPage);
+      }
+      return;
+    }
+
+    // scroll default conversations
+    if (convHasMore && !loading) {
       setLoading(true);
       try {
         const more = await fetchConversations(userId, convPage, PAGE_SIZE);
@@ -876,8 +942,7 @@ export default function ChatView({
 
   return (
     <div className="flex flex-1 overflow-hidden">
-      {/* Sidebar */}
-      <aside className="w-96 bg-gray-100 border-r overflow-y-auto overflow-x-hidden"
+      {/* <aside className="w-96 bg-gray-100 border-r overflow-y-auto overflow-x-hidden"
         onScroll={handleSidebarScroll}
       >
         <button
@@ -887,6 +952,15 @@ export default function ChatView({
           <Users className="w-5 h-5" />
           <span>New Group</span>
         </button>
+        <div className="px-4 mb-2">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search conversations..."
+            className="w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
         {loading && (
           <div className="text-center py-3 text-gray-500">Loading...</div>
         )}
@@ -926,14 +1000,6 @@ export default function ChatView({
               }`}
             >
               <div className="relative w-10 h-10 shrink-0">
-                {/* <img
-                  src={displayImage}
-                  alt={displayName}
-                  className="w-10 h-10 rounded-full object-cover"
-                  onError={(e) =>
-                    ((e.currentTarget as HTMLImageElement).src = DEFAULT_AVATAR)
-                  }
-                /> */}
                   {c.type === "group" && !c.imageUrl ? (
                   <div className="relative w-10 h-10">
                     {c.members.slice(-2).map((m, idx) => (
@@ -960,7 +1026,6 @@ export default function ChatView({
                     }
                   />
                 )}
-                {/* Hiển thị trạng thái online/offline */}
                 <span
                   className={`absolute bottom-0 right-0 w-3 h-3 rounded-full ${
                     isOnline ? "bg-green-500" : ""
@@ -987,6 +1052,135 @@ export default function ChatView({
             </div>
           );
         })}
+      </aside> */}
+      {/* Sidebar */}
+      <aside className="w-96 bg-gray-100 border-r flex flex-col h-full">
+        {/* Sticky Header */}
+        <div className="flex flex-col sticky top-0 z-10 bg-gray-100 pt-2 pb-2 border-b">
+          {/* New Group Button */}
+          <button
+            onClick={() => setShowNewGroupModal(true)}
+            className="w-full py-2 px-4 bg-blue-500 text-white rounded hover:bg-blue-600 mb-2 flex items-center justify-center gap-2"
+          >
+            <Users className="w-5 h-5" />
+            <span>New Group</span>
+          </button>
+
+          {/* Search Input */}
+          <div className="px-4 mb-2">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Search conversations..."
+              className="w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+        </div>
+
+        {/* Scrollable Conversation List */}
+        <div
+          className="flex-1 overflow-y-auto overflow-x-hidden"
+          onScroll={handleSidebarScroll}
+        >
+          {loading && (
+            <div className="text-center py-3 text-gray-500">Loading...</div>
+          )}
+          {!loading && (searchResults.length === 0 && conversations.length === 0) && (
+            <div className="text-center py-3 text-gray-500">No conversations</div>
+          )}
+
+          {(searchResults.length > 0 ? searchResults : conversations).map((c) => {
+            const other = c.type === "private"
+              ? c.members.find((m) => m.userId !== userId)
+              : null;
+
+            const displayName = c.type === "group"
+              ? c.name || "Unnamed group"
+              : other?.fullName || "Private chat";
+
+            const displayImage = c.type === "group"
+              ? c.imageUrl || DEFAULT_AVATAR
+              : other?.imageUrl || DEFAULT_AVATAR;
+
+            const presenceId = c.type === "group" ? "" : other?.userId || "";
+            const lastSeen = presenceId ? usersPresence[presenceId] : null;
+            const diffMinutes = lastSeen ? Math.floor((Date.now() - lastSeen) / 60000) : null;
+            const isOnline = c.type === "group"
+              ? isGroupOnline(c, userId, usersPresence)
+              : diffMinutes !== null && diffMinutes <= 5;
+
+            const handleConversationClick = () => {
+              setSelectedConversation(c.id);
+              setSearchResults([]); // Xóa kết quả search
+              setSearchQuery("");   // Reset ô search
+            };
+
+            return (
+              <div
+                key={c.id}
+                onClick={handleConversationClick}
+                className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-200 ${
+                  selectedConversation === c.id ? "bg-gray-300" : ""
+                }`}
+              >
+                <div className="relative w-10 h-10 shrink-0">
+                  {c.type === "group" && !c.imageUrl ? (
+                    <div className="relative w-10 h-10">
+                      {c.members.slice(-2).map((m, idx) => (
+                        <img
+                          key={m.userId}
+                          src={m.imageUrl || DEFAULT_AVATAR}
+                          alt={m.fullName}
+                          className={`absolute object-cover rounded-full ${
+                            idx === 0
+                              ? "top-0 right-0 z-0 w-5 h-5"
+                              : "bottom-0 left-0 z-10 w-5 h-5"
+                          }`}
+                          style={{ width: "1.65rem", height: "1.65rem" }}
+                        />
+                      ))}
+                    </div>
+                  ) : (
+                    <img
+                      src={displayImage}
+                      alt={displayName}
+                      className="w-10 h-10 rounded-full object-cover"
+                      onError={(e) =>
+                        ((e.currentTarget as HTMLImageElement).src = DEFAULT_AVATAR)
+                      }
+                    />
+                  )}
+
+                  {/* Online status */}
+                  <span
+                    className={`absolute bottom-0 right-0 w-3 h-3 rounded-full ${
+                      isOnline ? "bg-green-500" : ""
+                    }`}
+                    title={
+                      c.type === "group"
+                        ? isOnline
+                          ? "Online"
+                          : "Offline"
+                        : lastSeen !== null
+                        ? isOnline
+                          ? "Online"
+                          : `Active ${diffMinutes} minutes ago`
+                        : "Offline"
+                    }
+                  />
+                </div>
+
+                <div className="flex-1">
+                  <div className="font-medium">{displayName}</div>
+                  <div className="text-sm text-gray-500 truncate">
+                    {getLastMessagePreview(c)}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </aside>
 
       {/* Chat area */}

@@ -365,4 +365,36 @@ public class ConversationServiceImpl implements ConversationService {
 
         return ResponseEntity.ok(modelMapper.map(conversation.get(), ConversationResponse.class));
     }
+    @Override
+    public ResponseEntity<List<ConversationResponse>> searchConversations(
+            String currentUserId, String keyword, int page, int size) {
+
+        Pageable pageable = PageRequest.of(page, size);
+
+        // 1. Public conversation: name contains keyword
+        Criteria publicCriteria = Criteria.where("type").is("group")
+                .and("name").regex(keyword, "i");
+
+        // 2. Private conversation: currentUserId is a member AND the other member's name contains keyword
+        Criteria privateCriteria = new Criteria().andOperator(
+                Criteria.where("type").is("private"),
+                Criteria.where("members.userId").is(currentUserId),
+                Criteria.where("members").elemMatch(
+                        Criteria.where("userId").ne(currentUserId)
+                                .and("fullName").regex(keyword, "i")
+                )
+        );
+
+        Query query = new Query(new Criteria().orOperator(publicCriteria, privateCriteria));
+        query.with(pageable);
+        query.with(Sort.by(Sort.Direction.DESC, "lastMessageAt"));
+
+        List<ConversationEntity> conversations = mongoTemplate.find(query, ConversationEntity.class);
+
+        List<ConversationResponse> results = conversations.stream()
+                .map(c -> modelMapper.map(c, ConversationResponse.class))
+                .toList();
+
+        return ResponseEntity.ok(results);
+    }
 }

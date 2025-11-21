@@ -28,4 +28,6 @@ public interface ConversationService {
     ConversationResponse getConversation(String conversationId);
 
     ResponseEntity<ConversationResponse> getPrivateConversation(String currentUserId, String otherUserId);
+
+    ResponseEntity<List<ConversationResponse>> searchConversations(String currentUserId, String q, int page, int size);
 }

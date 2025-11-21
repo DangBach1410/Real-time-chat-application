@@ -243,3 +243,17 @@ export async function getPrivateConversation(
   return res.data;
 }
 
+// --- Search conversations ---
+export async function searchConversations(
+  currentUserId: string,
+  q: string,
+  page = 0,
+  size = 20
+): Promise<ConversationResponse[]> {
+  const res = await api.get("/chat/conversations/search", {
+    params: { currentUserId, q, page, size },
+  });
+  return res.data as ConversationResponse[];
+}
+
+
