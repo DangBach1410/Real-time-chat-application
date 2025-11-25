@@ -55,4 +55,40 @@ public class MessageController {
     ) {
         return messageService.getMessagesByConversation(conversationId, page, size);
     }
+    @GetMapping("/search")
+    public ResponseEntity<List<MessageResponse>> searchMessages(
+            @RequestParam String conversationId,
+            @RequestParam String keyword,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size
+    ) { 
+        return messageService.searchMessages(conversationId, keyword, page, size);
+    }
+    @GetMapping("/conversation/{conversationId}/context")
+    public ResponseEntity<List<MessageResponse>> getMessageContext(
+            @PathVariable String conversationId,
+            @RequestParam String messageId,
+            @RequestParam(defaultValue = "20") int before,
+            @RequestParam(defaultValue = "20") int after
+    ) {
+        return messageService.getMessageContext(conversationId, messageId, before, after);
+    }
+
+    @GetMapping("/conversation/{conversationId}/old")
+    public ResponseEntity<List<MessageResponse>> getOldMessages(
+            @PathVariable String conversationId,
+            @RequestParam String beforeMessageId,
+            @RequestParam(defaultValue = "30") int limit
+    ) {
+        return messageService.getOldMessages(conversationId, beforeMessageId, limit);
+    }
+
+    @GetMapping("/conversation/{conversationId}/new")
+    public ResponseEntity<List<MessageResponse>> getNewMessages(
+            @PathVariable String conversationId,
+            @RequestParam String afterMessageId,
+            @RequestParam(defaultValue = "30") int limit
+    ) {
+        return messageService.getNewMessages(conversationId, afterMessageId, limit);
+    }
 }

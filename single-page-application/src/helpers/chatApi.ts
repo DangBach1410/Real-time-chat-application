@@ -256,4 +256,54 @@ export async function searchConversations(
   return res.data as ConversationResponse[];
 }
 
+export async function searchMessages(
+  conversationId: string,
+  keyword: string,
+  page = 0,
+  size = 20
+): Promise<MessageResponse[]> {
+  const res = await api.get("/chat/messages/search", {
+    params: { conversationId, keyword, page, size },
+  });
 
+  return res.data as MessageResponse[];
+}
+// --- Fetch message context (around a pivot message) ---
+export async function fetchMessageContext(
+  conversationId: string,
+  messageId: string,
+  before = 20,
+  after = 20
+): Promise<MessageResponse[]> {
+  const res = await api.get(
+    `/chat/messages/conversation/${conversationId}/context`,
+    { params: { messageId, before, after } }
+  );
+  return res.data as MessageResponse[];
+}
+
+// --- Fetch old messages (scroll lên trên) ---
+export async function fetchOldMessages(
+  conversationId: string,
+  beforeMessageId: string,
+  limit = 30
+): Promise<MessageResponse[]> {
+  const res = await api.get(
+    `/chat/messages/conversation/${conversationId}/old`,
+    { params: { beforeMessageId, limit } }
+  );
+  return res.data as MessageResponse[];
+}
+
+// --- Fetch new messages (scroll xuống dưới) ---
+export async function fetchNewMessages(
+  conversationId: string,
+  afterMessageId: string,
+  limit = 30
+): Promise<MessageResponse[]> {
+  const res = await api.get(
+    `/chat/messages/conversation/${conversationId}/new`,
+    { params: { afterMessageId, limit } }
+  );
+  return res.data as MessageResponse[];
+}

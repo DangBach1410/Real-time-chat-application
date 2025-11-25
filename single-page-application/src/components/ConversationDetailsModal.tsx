@@ -1,9 +1,10 @@
 import { useEffect, useState, useRef } from "react";
-import { ChevronDown, ChevronUp, File as FileIcon, Camera, UserPlus, Pencil, Check, X, LogOut, XCircle } from "lucide-react";
+import { ChevronDown, ChevronUp, File as FileIcon, Camera, UserPlus, Pencil, Check, X, LogOut, XCircle, Search } from "lucide-react";
 import { DEFAULT_AVATAR } from "../constants/common";
 import type { ConversationResponse, MemberResponse, MessageResponse } from "../helpers/chatApi";
 import AddMemberModal from "./AddMemberModal";
 import ConfirmModal from "./ConfirmModal";
+import ConversationSearchModal from "./ConversationSearchModal";
 import { removeConversationMember, updateConversationImage, updateConversationName } from "../helpers/chatApi";
 import { fetchUserById } from "../helpers/userApi";
 import type { UserResponse } from "../helpers/userApi";
@@ -17,6 +18,9 @@ interface ConversationDetailsModalProps {
   fetchFiles: (conversationId: string, page: number, size: number) => Promise<MessageResponse[]>;
   fetchLinks: (conversationId: string, page: number, size: number) => Promise<MessageResponse[]>;
   onConversationUpdated?: (updated: ConversationResponse) => void;
+  incomingMessage?: MessageResponse | null;
+  onJumpToMessage?: (m: MessageResponse, q?: string) => void;
+  onSearchClosed?: () => void;
 }
 
 export default function ConversationDetailsModal({
@@ -28,6 +32,9 @@ export default function ConversationDetailsModal({
   fetchFiles,
   fetchLinks,
   onConversationUpdated,
+  incomingMessage,
+  onJumpToMessage,
+  onSearchClosed,
 }: ConversationDetailsModalProps) {
   const [sectionsOpen, setSectionsOpen] = useState({
     members: true,
@@ -41,12 +48,14 @@ export default function ConversationDetailsModal({
   const [files, setFiles] = useState<MessageResponse[]>([]);
   const [links, setLinks] = useState<MessageResponse[]>([]);
   const [showAddMember, setShowAddMember] = useState(false);
+  const [showSearchModal, setShowSearchModal] = useState(false);
   const [isEditingName, setIsEditingName] = useState(false);
   const [newName, setNewName] = useState(conversation.name || "");
   const [confirmData, setConfirmData] = useState<{
     message: string;
     onConfirm: () => void;
   } | null>(null);
+  const [localConversation, setLocalConversation] = useState(conversation);
 
   const mediaPage = useRef(0);
   const filesPage = useRef(0);
@@ -59,9 +68,94 @@ export default function ConversationDetailsModal({
 
   const pageSize = 20;
 
+  // track whether each list has been loaded at least once
+  const mediaLoaded = useRef(false);
+  const filesLoaded = useRef(false);
+  const linksLoaded = useRef(false);
+
+  // track seen ids so we don't add duplicates
+  const seenIds = useRef<Set<string>>(new Set());
+
+  // When parent passes an incoming message, analyze and add to appropriate list
+  // Only add if that list has been loaded at least once (mediaLoaded/filesLoaded/linksLoaded)
+  useEffect(() => {
+    if (!incomingMessage) return;
+    if (incomingMessage.conversationId !== conversation.id) return;
+
+    // skip if we've already added/seen this message
+    if (seenIds.current.has(incomingMessage.id)) return;
+
+    try {
+      if (incomingMessage.type === "media") {
+        const meta = JSON.parse(incomingMessage.content);
+        const mediaType = meta?.mediaType;
+        if ((mediaType === "image" || mediaType === "video") && mediaLoaded.current) {
+          setMedia((prev) => [incomingMessage, ...prev]);
+          seenIds.current.add(incomingMessage.id);
+        } else if (mediaType === "file" && filesLoaded.current) {
+          setFiles((prev) => [incomingMessage, ...prev]);
+          seenIds.current.add(incomingMessage.id);
+        }
+      } else if (incomingMessage.type === "link") {
+        if (!linksLoaded.current) return;
+        setLinks((prev) => [incomingMessage, ...prev]);
+        seenIds.current.add(incomingMessage.id);
+      } else if (incomingMessage.type === "text") {
+        // maybe contains a link payload
+        if (!linksLoaded.current) return;
+        try {
+          const maybe = JSON.parse(incomingMessage.content);
+          if (maybe && maybe.url) {
+            setLinks((prev) => [incomingMessage, ...prev]);
+            seenIds.current.add(incomingMessage.id);
+          }
+        } catch {
+          // plain text - ignore for details lists
+        }
+      }
+    } catch (err) {
+      console.error("Failed to process incoming message in details modal:", err);
+    }
+  }, [incomingMessage, conversation.id]);
+
   // Load members on mount
   useEffect(() => {
     fetchMembers(conversation.id).then(setMembers);
+  }, [conversation.id]);
+
+  
+  // When parent changes the conversation prop, sync local state and reset lists
+  useEffect(() => {
+    setLocalConversation(conversation);
+    setNewName(conversation.name || "");
+    setIsEditingName(false);
+
+    // Close search modal when conversation changes so the search state is cleared
+    setShowSearchModal(false);
+
+    // reset members (will be re-fetched by the effect above), lists and pagination
+    setMembers([]);
+    setMedia([]);
+    setFiles([]);
+    setLinks([]);
+
+    mediaPage.current = 0;
+    filesPage.current = 0;
+    linksPage.current = 0;
+
+    mediaLoaded.current = false;
+    filesLoaded.current = false;
+    linksLoaded.current = false;
+
+    seenIds.current.clear();
+
+    setMediaHasMore(true);
+    setFilesHasMore(true);
+    setLinksHasMore(true);
+
+    setSectionsOpen({ members: true, media: false, files: false, links: false });
+    setShowAddMember(false);
+    setConfirmData(null);
   }, [conversation.id]);
 
   // Lấy displayName và displayImage giống ChatCrossBar
@@ -72,11 +166,11 @@ export default function ConversationDetailsModal({
 
   const displayName = isPrivate
     ? otherUser?.fullName
-    : conversation.name || "Unnamed group";
+    : localConversation.name || "Unnamed group";
 
   const displayImage = isPrivate
     ? otherUser?.imageUrl || DEFAULT_AVATAR
-    : conversation.imageUrl || DEFAULT_AVATAR;
+    : localConversation.imageUrl || DEFAULT_AVATAR;
 
   const isAdmin =
     conversation.members?.find((u) => u.userId === currentUserId)?.role === "admin";
@@ -127,7 +221,11 @@ export default function ConversationDetailsModal({
           }
         }
       );
-      setMedia(items);
+      // filter out already-seen ids (e.g., added via websocket earlier)
+      const newMedia = items.filter((it) => !seenIds.current.has(it.id));
+      setMedia(newMedia);
+      newMedia.forEach((it) => seenIds.current.add(it.id));
+      mediaLoaded.current = true;
       mediaPage.current = nextPage;
       setMediaHasMore(hasMore);
     }
@@ -147,7 +245,10 @@ export default function ConversationDetailsModal({
           }
         }
       );
-      setFiles(items);
+      const newFiles = items.filter((it) => !seenIds.current.has(it.id));
+      setFiles(newFiles);
+      newFiles.forEach((it) => seenIds.current.add(it.id));
+      filesLoaded.current = true;
       filesPage.current = nextPage;
       setFilesHasMore(hasMore);
     }
@@ -167,7 +268,10 @@ export default function ConversationDetailsModal({
           }
         }
       );
-      setLinks(items);
+      const newLinks = items.filter((it) => !seenIds.current.has(it.id));
+      setLinks(newLinks);
+      newLinks.forEach((it) => seenIds.current.add(it.id));
+      linksLoaded.current = true;
       linksPage.current = nextPage;
       setLinksHasMore(hasMore);
     }
@@ -192,7 +296,9 @@ export default function ConversationDetailsModal({
             }
           }
         );
-        setMedia((prev) => [...prev, ...items]);
+        const appended = items.filter((it) => !seenIds.current.has(it.id));
+        appended.forEach((it) => seenIds.current.add(it.id));
+        setMedia((prev) => [...prev, ...appended]);
         mediaPage.current = nextPage;
         setMediaHasMore(hasMore);
       }
@@ -212,7 +318,9 @@ export default function ConversationDetailsModal({
             }
           }
         );
-        setFiles((prev) => [...prev, ...items]);
+        const appended = items.filter((it) => !seenIds.current.has(it.id));
+        appended.forEach((it) => seenIds.current.add(it.id));
+        setFiles((prev) => [...prev, ...appended]);
         filesPage.current = nextPage;
         setFilesHasMore(hasMore);
       }
@@ -232,7 +340,9 @@ export default function ConversationDetailsModal({
             }
           }
         );
-        setLinks((prev) => [...prev, ...items]);
+        const appended = items.filter((it) => !seenIds.current.has(it.id));
+        appended.forEach((it) => seenIds.current.add(it.id));
+        setLinks((prev) => [...prev, ...appended]);
         linksPage.current = nextPage;
         setLinksHasMore(hasMore);
       }
@@ -313,6 +423,7 @@ export default function ConversationDetailsModal({
         file
       );
 
+      setLocalConversation(updatedConversation);
       onConversationUpdated?.(updatedConversation);
     } catch (err) {
       console.error("Failed to update group image", err);
@@ -321,7 +432,7 @@ export default function ConversationDetailsModal({
   };
 
   const handleSaveName = async () => {
-    if (!newName.trim() || newName === conversation.name) {
+    if (!newName.trim() || newName === localConversation.name) {
       setNewName(conversation.name || "");
       setIsEditingName(false);
       return;
@@ -341,6 +452,7 @@ export default function ConversationDetailsModal({
         newName
       );
 
+      setLocalConversation(updated);
       onConversationUpdated?.(updated);
       setIsEditingName(false);
     } catch (err) {
@@ -350,7 +462,7 @@ export default function ConversationDetailsModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div className="w-96 max-h-screen border-l bg-white flex flex-col shadow">
       <div className="bg-white w-96 max-h-[90vh] rounded shadow p-4 flex flex-col">
         {/* Header giữ nguyên, chỉ thêm camera overlay + Add Member */}
         <div className="flex flex-col items-center mb-6 relative">
@@ -449,7 +561,7 @@ export default function ConversationDetailsModal({
                 </>
               ) : (
                 <>
-                  <h2 className="text-lg font-semibold">{conversation.name}</h2>
+                  <h2 className="text-lg font-semibold">{localConversation.name}</h2>
                   <button
                     className="p-1 text-gray-500 hover:text-gray-700"
                     onClick={() => setIsEditingName(true)}
@@ -465,13 +577,35 @@ export default function ConversationDetailsModal({
 
           {/* Nút Add Member */}
           {!isPrivate &&(
-            <button
-              className="mt-2 flex items-center gap-1 px-2 py-1 bg-blue-500 text-white rounded text-sm"
-              onClick={() => setShowAddMember(true)}
-            >
-              <UserPlus size={16} />
-              Add Member
-            </button>
+            <div className="flex gap-2 mt-2">
+              <button
+                className="flex items-center gap-1 px-2 py-1 bg-blue-500 text-white rounded text-sm"
+                onClick={() => setShowAddMember(true)}
+              >
+                <UserPlus size={16} />
+                Add Member
+              </button>
+              <button
+                className="flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-700 rounded text-sm"
+                onClick={() => setShowSearchModal(true)}
+                title="Search messages"
+              >
+                <Search size={16} />
+                Search Messages
+              </button>
+            </div>
+          )}
+          {isPrivate && (
+            <div className="mt-2">
+              <button
+                className="flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-700 rounded text-sm"
+                onClick={() => setShowSearchModal(true)}
+                title="Search messages"
+              >
+                <Search size={16} />
+                Search Messages
+              </button>
+            </div>
           )}
         </div>
 
@@ -657,6 +791,19 @@ export default function ConversationDetailsModal({
           existingMembers={members} // những người đã là member
           onClose={() => setShowAddMember(false)}
           onMembersAdded={(cid) => fetchMembers(cid).then(setMembers)}
+        />
+      )}
+      {showSearchModal && (
+        <ConversationSearchModal
+          conversationId={conversation.id}
+          onBack={() => {
+            setShowSearchModal(false);
+            onSearchClosed?.();
+          }}
+          onSelectMessage={(m, q) => {
+            // notify parent about the selected message but DO NOT close the search modal
+            onJumpToMessage?.(m, q);
+          }}
         />
       )}
       {confirmData && (

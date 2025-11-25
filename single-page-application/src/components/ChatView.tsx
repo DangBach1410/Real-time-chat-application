@@ -26,6 +26,14 @@ import Picker from "@emoji-mart/react";
 import data from "@emoji-mart/data";
 import { useNavigate } from "react-router-dom";
 import { searchConversations } from "../helpers/chatApi";
+import {
+  fetchConversationMembers,
+  fetchConversationMedia,
+  fetchConversationFiles,
+  fetchConversationLinks,
+} from "../helpers/chatApi";
+import { fetchMessageContext, fetchOldMessages, fetchNewMessages } from "../helpers/chatApi";
+import ConversationDetailsModal from "./ConversationDetailsModal";
 
 interface ChatViewProps {
   userId: string;
@@ -55,6 +63,19 @@ export default function ChatView({
   userLanguageCode,
   conversationId,
 }: ChatViewProps) {
+  // Helper: merge two message arrays, remove duplicates, sort ascending by createdAt
+  const mergeAndSortMessages = (
+    existing: MessageResponse[],
+    incoming: MessageResponse[]
+  ) => {
+    const map = new Map<string, MessageResponse>();
+    // add all messages into map (keyed by id) so duplicates are removed
+    existing.concat(incoming).forEach((m) => map.set(m.id, m));
+    const arr = Array.from(map.values());
+    arr.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+    return arr;
+  };
+
   const [conversations, setConversations] = useState<ConversationResponse[]>(
     []
   );
@@ -86,14 +107,28 @@ export default function ChatView({
   const [searchPage, setSearchPage] = useState(0);
   const [searchHasMore, setSearchHasMore] = useState(true);
   const [searchLoading, setSearchLoading] = useState(false);
+  const [showDetails, setShowDetails] = useState(false);
+  const [activeConversation, setActiveConversation] = useState<ConversationResponse | null>(null);
+  const [incomingForDetails, setIncomingForDetails] = useState<MessageResponse | null>(null);
   
   const pendingNavigationRef = useRef<(() => void) | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+  const skipInitialLoadRef = useRef(false);
+  const contextModeRef = useRef(false);
+  const contextPivotRef = useRef<string | null>(null);
+  const prevMessagesRef = useRef<MessageResponse[] | null>(null);
+  const prevPageRef = useRef<number | null>(null);
+  const prevHasMoreRef = useRef<boolean | null>(null);
+  // track whether context-mode can fetch older/newer pages
+  const contextHasMoreOlderRef = useRef<boolean>(true);
+  const contextHasMoreNewerRef = useRef<boolean>(true);
   const stompClient = useRef<StompJs.Client | null>(null);
   const [recordDuration, setRecordDuration] = useState(0);
   const emojiPickerRef = useRef<HTMLDivElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  const [highlightQuery, setHighlightQuery] = useState<string>("");
 
   const navigate = useNavigate();
 
@@ -335,7 +370,9 @@ export default function ChatView({
         (message) => {
           try {
             const msg: MessageResponse = JSON.parse(message.body);
-            setMessages((prev) => [...prev, msg]);
+            setMessages((prev) => mergeAndSortMessages(prev, [msg]));
+            // keep last incoming message so details panel can react if open
+            setIncomingForDetails(msg);
             requestAnimationFrame(() => {
               messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
             });
@@ -374,20 +411,23 @@ export default function ChatView({
   // load initial messages
   useEffect(() => {
     if (!selectedConversation) return;
+    // If we set this flag (jump), skip the default initial fetch which would overwrite context
+    if (skipInitialLoadRef.current) {
+      skipInitialLoadRef.current = false;
+      return;
+    }
 
     const load = async () => {
       setLoading(true);
       try {
         const data = await fetchMessages(selectedConversation, 0, PAGE_SIZE);
-        setMessages(data.reverse());
+        // Ensure messages are chronological (oldest -> newest)
+        setMessages(data.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
         setPage(1);
         setHasMore(data.length === PAGE_SIZE);
-
-        requestAnimationFrame(() => {
-          if (messagesEndRef.current) {
-            messagesEndRef.current.scrollIntoView({ behavior: "auto" });
-          }
-        });
+        setTimeout(() => {
+          messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+        }, 500);
       } catch (err) {
         console.error("Failed to fetch messages:", err);
       } finally {
@@ -397,6 +437,84 @@ export default function ChatView({
 
     load();
   }, [selectedConversation]);
+
+  // Jump to a specific message (called from details/search)
+  const handleJumpToMessage = async (m: MessageResponse, q?: string) => {
+    if (!m) return;
+
+    // save current messages so we can restore when search/details closed
+    prevMessagesRef.current = messages;
+    prevPageRef.current = page;
+    prevHasMoreRef.current = hasMore;
+
+    // save highlight info (keyword + message id) so UI can render highlighted pivot
+    if (q) {
+      setHighlightedMessageId(m.id);
+      setHighlightQuery(q);
+    } else {
+      setHighlightedMessageId(m.id);
+      setHighlightQuery("");
+    }
+
+    // prevent the default initial fetch from overwriting our context load
+    skipInitialLoadRef.current = true;
+    contextModeRef.current = true;
+    contextPivotRef.current = m.id;
+
+    // switch conversation first (this triggers websocket subscribe but we skip the initial fetch)
+    setSelectedConversation(m.conversationId);
+    // set activeConversation if possible
+    const conv = conversations.find((c) => c.id === m.conversationId) || null;
+    setActiveConversation(conv);
+
+    // initialize context-mode fetch availability
+    contextHasMoreOlderRef.current = true;
+    contextHasMoreNewerRef.current = true;
+
+    setLoading(true);
+    try {
+      const ctx = await fetchMessageContext(m.conversationId, m.id, PAGE_SIZE, PAGE_SIZE);
+      const sorted = ctx.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+      setMessages(sorted);
+      // after loading a context, we consider hasMore true (can still fetch older/newer via id)
+      setHasMore(true);
+
+      // scroll to the pivot message after render
+      setTimeout(() => {
+        const el = document.getElementById(`msg-${m.id}`);
+        if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+      }, 150);
+      } catch (err) {
+      console.error("Failed to fetch message context:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Called when the details/search modal closes — restore messages if we jumped earlier
+  const handleSearchClosed = () => {
+    if (prevMessagesRef.current) {
+      setMessages(prevMessagesRef.current);
+      setPage(prevPageRef.current ?? 0);
+      setHasMore(prevHasMoreRef.current ?? true);
+      prevMessagesRef.current = null;
+      prevPageRef.current = null;
+      prevHasMoreRef.current = null;
+      contextModeRef.current = false;
+      contextPivotRef.current = null;
+      // reset context fetch availability so we don't block future loads
+      contextHasMoreOlderRef.current = true;
+      contextHasMoreNewerRef.current = true;
+      // clear highlight state
+      setHighlightedMessageId(null);
+      setHighlightQuery("");
+
+      // scroll to latest message after restoring old list
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      }, 50);
+    }
+  };
 
   // auto clear error
   useEffect(() => {
@@ -441,48 +559,91 @@ export default function ChatView({
   // scroll load more
   const handleScroll = async (e: React.UIEvent<HTMLDivElement>) => {
     const target = e.currentTarget;
-    if (target.scrollTop === 0 && hasMore && !loading) {
+    // If at top: load older messages
+    if (target.scrollTop === 0 && !loading) {
+      // guard: if in context mode but we've already determined there are no older messages, skip
+      if (contextModeRef.current) {
+        if (!contextHasMoreOlderRef.current) return;
+      } else {
+        if (!hasMore) return;
+      }
+
       setLoading(true);
       try {
-        const more = await fetchMessages(
-          selectedConversation!,
-          page,
-          PAGE_SIZE
-        );
-        setMessages((prev) => [...more.reverse(), ...prev]);
-        setPage((prev) => prev + 1);
-        setHasMore(more.length === PAGE_SIZE);
+        if (contextModeRef.current) {
+          // load older messages relative to current first message
+          const firstId = messages[0]?.id;
+          if (firstId) {
+            // preserve scroll position: capture height before adding older messages
+            const prevHeight = target.scrollHeight;
+            const older = await fetchOldMessages(selectedConversation!, firstId, PAGE_SIZE);
+            if (older.length > 0) {
+              setMessages((prev) => mergeAndSortMessages(prev, older));
+              // after DOM updates, adjust scrollTop so the user stays at the same message
+              requestAnimationFrame(() => {
+                const newHeight = target.scrollHeight;
+                // move scroll down by the amount content grew
+                target.scrollTop = newHeight - prevHeight;
+              });
+            } else {
+              // no more older messages in context mode
+              contextHasMoreOlderRef.current = false;
+            }
+          } else {
+            contextHasMoreOlderRef.current = false;
+          }
+        } else if (hasMore) {
+          const more = await fetchMessages(
+            selectedConversation!,
+            page,
+            PAGE_SIZE
+          );
+          // Merge fetched page into existing messages, dedupe and keep chronological order
+          setMessages((prev) => mergeAndSortMessages(prev, more));
+          setPage((prev) => prev + 1);
+          setHasMore(more.length === PAGE_SIZE);
 
-        const prevHeight = target.scrollHeight;
-        requestAnimationFrame(() => {
-          const newHeight = target.scrollHeight;
-          target.scrollTop = newHeight - prevHeight;
-        });
+          const prevHeight = target.scrollHeight;
+          requestAnimationFrame(() => {
+            const newHeight = target.scrollHeight;
+            target.scrollTop = newHeight - prevHeight;
+          });
+        }
       } catch (err) {
         console.error("Failed to load more messages:", err);
       } finally {
         setLoading(false);
       }
     }
+
+    // If near bottom and in context mode: load newer messages
+    const nearBottom = target.scrollHeight - target.scrollTop - target.clientHeight < 50;
+    if (nearBottom && contextModeRef.current && !loading) {
+      // guard: if we've already determined there are no newer messages, skip
+      if (!contextHasMoreNewerRef.current) return;
+
+      setLoading(true);
+      try {
+        const lastId = messages[messages.length - 1]?.id;
+        if (lastId) {
+          const newer = await fetchNewMessages(selectedConversation!, lastId, PAGE_SIZE);
+          if (newer.length > 0) {
+            setMessages((prev) => mergeAndSortMessages(prev, newer));
+          } else {
+            // no more newer messages in context mode
+            contextHasMoreNewerRef.current = false;
+          }
+        } else {
+          contextHasMoreNewerRef.current = false;
+        }
+      } catch (err) {
+        console.error("Failed to load newer messages:", err);
+      } finally {
+        setLoading(false);
+      }
+    }
   };
 
-  // const handleSidebarScroll = async (e: React.UIEvent<HTMLDivElement>) => {
-  //   const target = e.currentTarget;
-  //   const threshold = 50; // gần đáy
-  //   if (convHasMore && !loading && target.scrollHeight - target.scrollTop - target.clientHeight < threshold) {
-  //     setLoading(true);
-  //     try {
-  //       const more = await fetchConversations(userId, convPage, PAGE_SIZE);
-  //       setConversations((prev) => [...prev, ...more]);
-  //       setConvPage((prev) => prev + 1);
-  //       setConvHasMore(more.length === PAGE_SIZE);
-  //     } catch (err) {
-  //       console.error("Failed to load more conversations:", err);
-  //     } finally {
-  //       setLoading(false);
-  //     }
-  //   }
-  // };
   const handleSidebarScroll = async (e: React.UIEvent<HTMLDivElement>) => {
     const target = e.currentTarget;
     const threshold = 50; // gần đáy
@@ -708,7 +869,13 @@ export default function ChatView({
 
   // render message content
   const renderContent = (m: MessageResponse, isOwn: boolean) => {
-    if (m.type === "text") return <div>{m.content}</div>;
+    if (m.type === "text") {
+      // if this message is highlighted (jumped-to), highlight keyword occurrences
+      if (m.id === highlightedMessageId && highlightQuery) {
+        return <div>{renderHighlightedContent(m.content, highlightQuery)}</div>;
+      }
+      return <div>{m.content}</div>;
+    }
     if (m.type === "text-translation") {
       return (
         <div className="flex flex-col">
@@ -844,6 +1011,25 @@ export default function ChatView({
     return <div>{m.content}</div>;
   };
 
+  function escapeRegExp(s: string) {
+    return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  function renderHighlightedContent(text: string, q: string) {
+    try {
+      const parts = text.split(new RegExp(`(${escapeRegExp(q)})`, "gi"));
+      return <>{parts.map((part, i) =>
+        part.toLowerCase() === q.toLowerCase() ? (
+          <span key={i} className="bg-yellow-200 font-semibold rounded">{part}</span>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}</>;
+    } catch {
+      return <>{text}</>;
+    }
+  }
+
   // helper for last message preview
   const getLastMessagePreview = (c: ConversationResponse) => {
     if (!c.lastMessage) return "No messages yet";
@@ -942,117 +1128,6 @@ export default function ChatView({
 
   return (
     <div className="flex flex-1 overflow-hidden">
-      {/* <aside className="w-96 bg-gray-100 border-r overflow-y-auto overflow-x-hidden"
-        onScroll={handleSidebarScroll}
-      >
-        <button
-          onClick={() => setShowNewGroupModal(true)}
-          className="w-full py-2 px-4 bg-blue-500 text-white rounded hover:bg-blue-600 mb-2 flex items-center justify-center gap-2"
-        >
-          <Users className="w-5 h-5" />
-          <span>New Group</span>
-        </button>
-        <div className="px-4 mb-2">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search conversations..."
-            className="w-full px-3 py-2 text-sm border rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-        {loading && (
-          <div className="text-center py-3 text-gray-500">Loading...</div>
-        )}
-        {!loading && conversations.length === 0 && (
-          <div className="text-center py-3 text-gray-500">No conversations</div>
-        )}
-
-        {conversations.map((c) => {
-          const other =
-            c.type === "private"
-              ? c.members.find((m) => m.userId !== userId)
-              : null;
-          const displayName =
-            c.type === "group"
-              ? c.name || "Unnamed group"
-              : other?.fullName || "Private chat";
-          const displayImage =
-            c.type === "group"
-              ? c.imageUrl || DEFAULT_AVATAR
-              : other?.imageUrl || DEFAULT_AVATAR;
-
-          const presenceId = c.type === "group" ? "" : other?.userId || "";
-          const lastSeen = presenceId ? usersPresence[presenceId] : null;
-          const diffMinutes = lastSeen
-            ? Math.floor((Date.now() - lastSeen) / 60000)
-            : null;
-          const isOnline = c.type === "group" 
-            ? isGroupOnline(c, userId, usersPresence)
-            : diffMinutes !== null && diffMinutes <= 5;
-
-          return (
-            <div
-              key={c.id}
-              onClick={() => setSelectedConversation(c.id)}
-              className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-200 ${
-                selectedConversation === c.id ? "bg-gray-300" : ""
-              }`}
-            >
-              <div className="relative w-10 h-10 shrink-0">
-                  {c.type === "group" && !c.imageUrl ? (
-                  <div className="relative w-10 h-10">
-                    {c.members.slice(-2).map((m, idx) => (
-                      <img
-                        key={m.userId}
-                        src={m.imageUrl || DEFAULT_AVATAR}
-                        alt={m.fullName}
-                        className={`absolute object-cover rounded-full ${
-                          idx === 0
-                            ? "top-0 right-0 z-0 w-5 h-5" 
-                            : "bottom-0 left-0 z-10 w-5 h-5"
-                        }`}
-                        style={{ width: "1.65rem", height: "1.65rem" }}
-                      />
-                    ))}
-                  </div>
-                ) : (
-                  <img
-                    src={displayImage}
-                    alt={displayName}
-                    className="w-10 h-10 rounded-full object-cover"
-                    onError={(e) =>
-                      ((e.currentTarget as HTMLImageElement).src = DEFAULT_AVATAR)
-                    }
-                  />
-                )}
-                <span
-                  className={`absolute bottom-0 right-0 w-3 h-3 rounded-full ${
-                    isOnline ? "bg-green-500" : ""
-                  }`}
-                  title={
-                    c.type === "group"
-                      ? isOnline
-                        ? "Online"
-                        : "Offline"
-                      : lastSeen !== null
-                      ? isOnline
-                        ? "Online"
-                        : `Active ${diffMinutes} minutes ago`
-                      : "Offline"
-                  }
-                />
-              </div>
-              <div className="flex-1">
-                <div className="font-medium">{displayName}</div>
-                <div className="text-sm text-gray-500 truncate">
-                  {getLastMessagePreview(c)}
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </aside> */}
       {/* Sidebar */}
       <aside className="w-96 bg-gray-100 border-r flex flex-col h-full">
         {/* Sticky Header */}
@@ -1090,7 +1165,7 @@ export default function ChatView({
             <div className="text-center py-3 text-gray-500">No conversations</div>
           )}
 
-          {(searchResults.length > 0 ? searchResults : conversations).map((c) => {
+              {(searchResults.length > 0 ? searchResults : conversations).map((c) => {
             const other = c.type === "private"
               ? c.members.find((m) => m.userId !== userId)
               : null;
@@ -1110,16 +1185,26 @@ export default function ChatView({
               ? isGroupOnline(c, userId, usersPresence)
               : diffMinutes !== null && diffMinutes <= 5;
 
-            const handleConversationClick = () => {
-              setSelectedConversation(c.id);
-              setSearchResults([]); // Xóa kết quả search
-              setSearchQuery("");   // Reset ô search
-            };
-
             return (
-              <div
+                <div
                 key={c.id}
-                onClick={handleConversationClick}
+                onClick={() => {
+                  // switching manually to a conversation -> exit context/jump mode
+                  contextModeRef.current = false;
+                  contextPivotRef.current = null;
+                  // clear any saved jump state
+                  prevMessagesRef.current = null;
+                  prevPageRef.current = null;
+                  prevHasMoreRef.current = null;
+                  // reset context fetch availability
+                  contextHasMoreOlderRef.current = true;
+                  contextHasMoreNewerRef.current = true;
+                  setSelectedConversation(c.id);
+                  setActiveConversation(c);
+                  // setShowDetails(true);
+                  setSearchResults([]); // Xóa kết quả search
+                  setSearchQuery("");   // Reset ô search
+                }}
                 className={`flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-gray-200 ${
                   selectedConversation === c.id ? "bg-gray-300" : ""
                 }`}
@@ -1183,75 +1268,123 @@ export default function ChatView({
         </div>
       </aside>
 
-      {/* Chat area */}
-      <main className="flex-1 flex flex-col bg-white">
-        {selectedConversation ? (
-          <>
-            {currentConversation && (
-              <ChatCrossBar
-                conversation={conversations.find(c => c.id === selectedConversation)!}
-                currentUserId={userId}
-                lastSeen={
-                  (() => {
-                    const conv = conversations.find(c => c.id === selectedConversation);
-                    if (!conv || conv.type === "group") return null;
-                    const other = conv.members.find((m) => m.userId !== userId);
-                    return other ? usersPresence[other.userId] : null;
-                  })()
-                }
-                usersPresence={usersPresence}
-                onConversationUpdated={handleConversationUpdated}
-              />
-            )}
-            <div
-              ref={scrollRef}
-              className="flex-1 overflow-y-auto p-4 space-y-1"
-              onScroll={handleScroll}
-            >
-              {messages.map((m, i) => {
-                const isOwn = m.sender.userId === userId;
-                const prev = messages[i - 1];
-                const next = messages[i + 1];
-                const isFirstInGroup = !prev || prev.sender.userId !== m.sender.userId;
-                const isLastInGroup = !next || next.sender.userId !== m.sender.userId;
+      <main className="flex-1 flex bg-white">  
+        {/* Chat Area*/}
+        <div className={`flex flex-col transition-all duration-300 ${
+          showDetails ? "w-2/3" : "w-full"
+        }`}>
+          {selectedConversation ? (
+            <>
+              {currentConversation && (
+                <ChatCrossBar
+                  conversation={conversations.find(c => c.id === selectedConversation)!}
+                  currentUserId={userId}
+                  lastSeen={
+                    (() => {
+                      const conv = conversations.find(c => c.id === selectedConversation);
+                      if (!conv || conv.type === "group") return null;
+                      const other = conv.members.find((m) => m.userId !== userId);
+                      return other ? usersPresence[other.userId] : null;
+                    })()
+                  }
+                  usersPresence={usersPresence}
+                  onOpenDetails={() => {
+                    setActiveConversation(currentConversation);
+                    setShowDetails(true);
+                  }}
+                />
+              )}
+              <div
+                ref={scrollRef}
+                className="flex-1 overflow-y-auto p-4 space-y-1"
+                onScroll={handleScroll}
+              >
+                {messages.map((m, i) => {
+                  const isOwn = m.sender.userId === userId;
+                  const isHighlighted = m.id === highlightedMessageId;
+                  const prev = messages[i - 1];
+                  const next = messages[i + 1];
+                  const isFirstInGroup = !prev || prev.sender.userId !== m.sender.userId;
+                  const isLastInGroup = !next || next.sender.userId !== m.sender.userId;
 
-                if (m.type === "notification") {
-                  const displayText = isOwn
-                    ? `You ${m.content}`
-                    : `${m.sender?.fullName ?? ""} ${m.content}`;
-                  return (
-                    <div key={m.id} className="flex justify-center my-2">
-                      <div className="bg-gray-200 text-gray-700 text-sm px-4 py-2 rounded-full shadow-sm">
-                        {displayText}
+                  if (m.type === "notification") {
+                    const displayText = isOwn
+                      ? `You ${m.content}`
+                      : `${m.sender?.fullName ?? ""} ${m.content}`;
+                    return (
+                      <div key={m.id} className="flex justify-center my-2">
+                        <div className="bg-gray-200 text-gray-700 text-sm px-4 py-2 rounded-full shadow-sm">
+                          {displayText}
+                        </div>
                       </div>
-                    </div>
-                  );
-                }
+                    );
+                  }
 
-                return (
-                  <div key={m.id} className={`flex ${isOwn ? "justify-end" : "justify-start"} mb-0.5`}>
-                    {!isOwn && (
-                      <div className="flex items-end gap-2">
-                        {isLastInGroup ? (
-                          <img
-                            src={m.sender.imageUrl || DEFAULT_AVATAR}
-                            alt={m.sender.fullName}
-                            className="w-8 h-8 rounded-full"
-                            onError={(e) =>
-                              ((e.currentTarget as HTMLImageElement).src = DEFAULT_AVATAR)
-                            }
-                          />
-                        ) : (
-                          <div className="w-8" />
-                        )}
-
-                        <div className="flex flex-col items-start relative group">
-                          {isFirstInGroup && (
-                            <span className="text-xs text-gray-500 mb-1">{m.sender.fullName}</span>
+                  return (
+                    <div id={`msg-${m.id}`} key={m.id} className={`flex ${isOwn ? "justify-end" : "justify-start"} mb-0.5 ${isHighlighted ? "font-semibold" : ""}`}>
+                      {!isOwn && (
+                        <div className="flex items-end gap-2">
+                          {isLastInGroup ? (
+                            <img
+                              src={m.sender.imageUrl || DEFAULT_AVATAR}
+                              alt={m.sender.fullName}
+                              className="w-8 h-8 rounded-full"
+                              onError={(e) =>
+                                ((e.currentTarget as HTMLImageElement).src = DEFAULT_AVATAR)
+                              }
+                            />
+                          ) : (
+                            <div className="w-8" />
                           )}
 
-                          {/* ✅ Bọc thêm một div flex để đặt bubble và Globe cùng hàng */}
-                          <div className="flex items-center gap-1">
+                          <div className="flex flex-col items-start relative group">
+                            {isFirstInGroup && (
+                              <span className="text-xs text-gray-500 mb-1">{m.sender.fullName}</span>
+                            )}
+
+                            {/* ✅ Bọc thêm một div flex để đặt bubble và Globe cùng hàng */}
+                            <div className="flex items-center gap-1">
+                              {m.type === "video_call" || m.type === "audio_call" ? (
+                                renderContent(m, isOwn)
+                              ) : m.type === "link" ? (
+                                renderContent(m, isOwn)
+                              ) : (
+                                <div
+                                  className={`${
+                                    m.type === "media" &&
+                                    (() => {
+                                      try {
+                                        const { mediaType } = JSON.parse(m.content);
+                                        return ["image", "video", "audio"].includes(mediaType);
+                                      } catch {
+                                        return false;
+                                      }
+                                    })()
+                                      ? ""
+                                      : "bg-gray-100 rounded-2xl px-3 py-2 max-w-xs whitespace-pre-wrap break-words"
+                                  }`}
+                                >
+                                  {renderContent(m, isOwn)}
+                                </div>
+                              )}
+
+                              {m.type === "text" && (
+                                <button
+                                  className="text-gray-400 hover:text-gray-700 opacity-0 group-hover:opacity-100 transition"
+                                  onClick={() => handleTranslation(m)}
+                                >
+                                  <Globe className="w-4 h-4" />
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+
+                      {isOwn && (
+                        <div className="flex items-end gap-2">
+                          <div className="flex flex-col items-end relative group">
                             {m.type === "video_call" || m.type === "audio_call" ? (
                               renderContent(m, isOwn)
                             ) : m.type === "link" ? (
@@ -1269,193 +1402,175 @@ export default function ChatView({
                                     }
                                   })()
                                     ? ""
-                                    : "bg-gray-100 rounded-2xl px-3 py-2 max-w-xs whitespace-pre-wrap break-words"
+                                    : "bg-blue-500 text-white rounded-2xl px-3 py-2 max-w-xs whitespace-pre-wrap break-words"
                                 }`}
                               >
                                 {renderContent(m, isOwn)}
                               </div>
                             )}
-
                             {m.type === "text" && (
                               <button
-                                className="text-gray-400 hover:text-gray-700 opacity-0 group-hover:opacity-100 transition"
-                                onClick={() => handleTranslation(m)}
+                                className={`absolute top-1/2 -translate-y-1/2 
+                                  -left-5
+                                  opacity-0 group-hover:opacity-100 
+                                  text-gray-400 hover:text-gray-700`}
+                                  onClick={() => handleTranslation(m)}
                               >
                                 <Globe className="w-4 h-4" />
                               </button>
                             )}
                           </div>
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
+                  );
+                })}
 
+                <div ref={messagesEndRef} />
+              </div>
 
-                    {isOwn && (
-                      <div className="flex items-end gap-2">
-                        <div className="flex flex-col items-end relative group">
-                          {m.type === "video_call" || m.type === "audio_call" ? (
-                            renderContent(m, isOwn)
-                          ) : m.type === "link" ? (
-                            renderContent(m, isOwn)
-                          ) : (
-                            <div
-                              className={`${
-                                m.type === "media" &&
-                                (() => {
-                                  try {
-                                    const { mediaType } = JSON.parse(m.content);
-                                    return ["image", "video", "audio"].includes(mediaType);
-                                  } catch {
-                                    return false;
-                                  }
-                                })()
-                                  ? ""
-                                  : "bg-blue-500 text-white rounded-2xl px-3 py-2 max-w-xs whitespace-pre-wrap break-words"
-                              }`}
-                            >
-                              {renderContent(m, isOwn)}
-                            </div>
-                          )}
-                          {m.type === "text" && (
-                            <button
-                              className={`absolute top-1/2 -translate-y-1/2 
-                                -left-5
-                                opacity-0 group-hover:opacity-100 
-                                text-gray-400 hover:text-gray-700`}
-                                onClick={() => handleTranslation(m)}
-                            >
-                              <Globe className="w-4 h-4" />
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    )}
+              {pendingFiles.length > 0 && renderPendingFiles()}
+              {errorMsg && (
+                <div className="p-2 text-sm text-red-600">{errorMsg}</div>
+              )}
+
+              {(() => {
+                const activeTyping = Object.entries(typingUsers)
+                  .filter(([_, isTyping]) => isTyping)
+                  .map(([uid]) => {
+                    const conv = conversations.find((c) =>
+                      c.members.some((m) => m.userId === uid)
+                    );
+                    return conv?.members.find((m) => m.userId === uid);
+                  })
+                  .filter(Boolean);
+
+                if (activeTyping.length === 0) return null;
+
+                return (
+                  <div className="flex items-center justify-end gap-2 px-3 py-1">
+                    {/* avatar group */}
+                    <div className="flex -space-x-2">
+                      {activeTyping.map((member) => (
+                        <img
+                          key={member!.userId}
+                          src={member!.imageUrl || DEFAULT_AVATAR}
+                          alt={member!.fullName}
+                          className="w-6 h-6 rounded-full border-2 border-white"
+                        />
+                      ))}
+                    </div>
+
+                    {/* dots */}
+                    <div className="flex gap-1">
+                      <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0ms]" />
+                      <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:150ms]" />
+                      <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:300ms]" />
+                    </div>
                   </div>
                 );
-              })}
+              })()}
 
-              <div ref={messagesEndRef} />
-            </div>
-
-            {pendingFiles.length > 0 && renderPendingFiles()}
-            {errorMsg && (
-              <div className="p-2 text-sm text-red-600">{errorMsg}</div>
-            )}
-
-            {(() => {
-              const activeTyping = Object.entries(typingUsers)
-                .filter(([_, isTyping]) => isTyping)
-                .map(([uid]) => {
-                  const conv = conversations.find((c) =>
-                    c.members.some((m) => m.userId === uid)
-                  );
-                  return conv?.members.find((m) => m.userId === uid);
-                })
-                .filter(Boolean);
-
-              if (activeTyping.length === 0) return null;
-
-              return (
-                <div className="flex items-center justify-end gap-2 px-3 py-1">
-                  {/* avatar group */}
-                  <div className="flex -space-x-2">
-                    {activeTyping.map((member) => (
-                      <img
-                        key={member!.userId}
-                        src={member!.imageUrl || DEFAULT_AVATAR}
-                        alt={member!.fullName}
-                        className="w-6 h-6 rounded-full border-2 border-white"
-                      />
-                    ))}
-                  </div>
-
-                  {/* dots */}
-                  <div className="flex gap-1">
-                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:0ms]" />
-                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:150ms]" />
-                    <span className="w-2 h-2 bg-gray-400 rounded-full animate-bounce [animation-delay:300ms]" />
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Input */}
-            <div className="p-3 border-t flex items-center gap-2">
-              <label className="cursor-pointer">
-                <Paperclip className="w-6 h-6 text-gray-500" />
-                <input
-                  type="file"
-                  multiple
-                  className="hidden"
-                  onChange={(e) => handleSelectFiles(e.target.files)}
-                />
-              </label>
-              {/* Nút micro ghi âm */}
-              <button
-                type="button"
-                onClick={handleToggleRecording}
-                className={`p-1 rounded-full transition-colors duration-200 ${
-                  isRecording
-                    ? "bg-red-500 text-white hover:bg-red-600" 
-                    : "text-gray-600"  
-                }`}
-                title={isRecording ? "Stop recording" : "Record voice message"}
-              >
-                {isRecording ? (
-                  // icon Stop
-                  <Square className="w-6 h-6" />
-                ) : (
-                  // icon Microphone
-                  <Mic className="w-6 h-6" />
-                )}
-              </button>
-
-              {isRecording && (
-                <span className="text-sm text-red-600 ml-1 animate-pulse">
-                  ● Recording... {recordDuration}s
-                </span>
-              )}
-                
+              {/* Input */}
+              <div className="p-3 border-t flex items-center gap-2">
+                <label className="cursor-pointer">
+                  <Paperclip className="w-6 h-6 text-gray-500" />
+                  <input
+                    type="file"
+                    multiple
+                    className="hidden"
+                    onChange={(e) => handleSelectFiles(e.target.files)}
+                  />
+                </label>
+                {/* Nút micro ghi âm */}
                 <button
                   type="button"
-                  ref={buttonRef}
-                  onClick={() => setShowEmojiPicker(prev => !prev)}
-                  className="p-2 text-gray-500"
+                  onClick={handleToggleRecording}
+                  className={`p-1 rounded-full transition-colors duration-200 ${
+                    isRecording
+                      ? "bg-red-500 text-white hover:bg-red-600" 
+                      : "text-gray-600"  
+                  }`}
+                  title={isRecording ? "Stop recording" : "Record voice message"}
                 >
-                  <Smile className="w-5 h-5 text-gray-600" />
+                  {isRecording ? (
+                    // icon Stop
+                    <Square className="w-6 h-6" />
+                  ) : (
+                    // icon Microphone
+                    <Mic className="w-6 h-6" />
+                  )}
                 </button>
 
-                {showEmojiPicker && (
-                  <div ref={emojiPickerRef} className="absolute bottom-16 left-4 z-50">
-                    <Picker
-                      data={data}
-                      onEmojiSelect={(emoji: any) => {
-                        setNewMessage(prev => prev + emoji.native);
-                      }}
-                    />
-                  </div>
+                {isRecording && (
+                  <span className="text-sm text-red-600 ml-1 animate-pulse">
+                    ● Recording... {recordDuration}s
+                  </span>
                 )}
-              <input
-                type="text"
-                className="flex-1 border rounded-2xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Type a message..."
-                value={newMessage}
-                onChange={handleInputChange}
-                onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
-              />
-              <button
-                onClick={handleSendMessage}
-                className="bg-blue-500 text-white rounded-full p-2 hover:bg-blue-600"
-              >
-                <Send className="w-5 h-5" />
-              </button>
+                  
+                  <button
+                    type="button"
+                    ref={buttonRef}
+                    onClick={() => setShowEmojiPicker(prev => !prev)}
+                    className="p-2 text-gray-500"
+                  >
+                    <Smile className="w-5 h-5 text-gray-600" />
+                  </button>
+
+                  {showEmojiPicker && (
+                    <div ref={emojiPickerRef} className="absolute bottom-16 left-4 z-50">
+                      <Picker
+                        data={data}
+                        onEmojiSelect={(emoji: any) => {
+                          setNewMessage(prev => prev + emoji.native);
+                        }}
+                      />
+                    </div>
+                  )}
+                <input
+                  type="text"
+                  className="flex-1 border rounded-2xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="Type a message..."
+                  value={newMessage}
+                  onChange={handleInputChange}
+                  onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
+                />
+                <button
+                  onClick={handleSendMessage}
+                  className="bg-blue-500 text-white rounded-full p-2 hover:bg-blue-600"
+                >
+                  <Send className="w-5 h-5" />
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="flex flex-1 items-center justify-center text-gray-500">
+              Select a conversation
             </div>
-          </>
-        ) : (
-          <div className="flex flex-1 items-center justify-center text-gray-500">
-            Select a conversation
-          </div>
-        )}
+          )}
+        </div>
+        {/* Details Panel */}
+        {showDetails && activeConversation && (
+          // <div className="border-l bg-gray-50 overflow-y-auto">
+              <ConversationDetailsModal
+                conversation={activeConversation}
+                currentUserId={userId}
+                onClose={() => { setShowDetails(false); handleSearchClosed(); }}
+                fetchMembers={fetchConversationMembers}
+                fetchMedia={fetchConversationMedia}
+                fetchFiles={fetchConversationFiles}
+                fetchLinks={fetchConversationLinks}
+                onConversationUpdated={handleConversationUpdated}
+                onJumpToMessage={handleJumpToMessage}
+                onSearchClosed={handleSearchClosed}
+                incomingMessage={
+                  incomingForDetails && activeConversation && incomingForDetails.conversationId === activeConversation.id
+                    ? incomingForDetails
+                    : null
+                }
+              />
+          // </div>
+        )}        
       </main>
       {showNewGroupModal && (
         <NewGroupModal

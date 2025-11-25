@@ -1,15 +1,7 @@
 // src/components/ChatCrossBar.tsx
-import { useState } from "react";
 import { MoreHorizontal, Phone, Video } from "lucide-react";
 import { DEFAULT_AVATAR } from "../constants/common";
 import type { ConversationResponse } from "../helpers/chatApi";
-import ConversationDetailsModal from "./ConversationDetailsModal";
-import {
-  fetchConversationMembers,
-  fetchConversationMedia,
-  fetchConversationFiles,
-  fetchConversationLinks,
-} from "../helpers/chatApi";
 import { startOrJoinCall, type CallRequest } from "../helpers/callApi";
 
 interface ChatCrossBarProps {
@@ -17,7 +9,7 @@ interface ChatCrossBarProps {
   currentUserId: string;
   lastSeen?: number | null;
   usersPresence: Record<string, number>;
-  onConversationUpdated?: (updated: ConversationResponse) => void;
+  onOpenDetails: () => void;
 }
 
 export default function ChatCrossBar({
@@ -25,9 +17,9 @@ export default function ChatCrossBar({
   currentUserId,
   lastSeen,
   usersPresence,
-  onConversationUpdated,
+  onOpenDetails,
 }: ChatCrossBarProps) {
-  const [detailsModalOpen, setDetailsModalOpen] = useState(false);
+  // const [detailsModalOpen, setDetailsModalOpen] = useState(false);
 
   function isGroupOnline(group: ConversationResponse, currentUserId: string, usersPresence: Record<string, number>): boolean {
     return group.members.some(member => 
@@ -104,14 +96,6 @@ export default function ChatCrossBar({
       {/* Left: avatar + name */}
       <div className="flex items-center gap-3 relative">
         <div className="relative">
-          {/* <img
-            src={displayImage}
-            alt={displayName}
-            className="w-10 h-10 rounded-full object-cover"
-            onError={(e) =>
-              ((e.currentTarget as HTMLImageElement).src = DEFAULT_AVATAR)
-            }
-          /> */}
           {conversation.type === "group" ? (
             conversation.imageUrl ? (
               // 🧩 Trường hợp group có ảnh riêng
@@ -180,7 +164,7 @@ export default function ChatCrossBar({
         {/* 3-dot: mở modal lớn */}
         <div className="relative">
           <button
-            onClick={() => setDetailsModalOpen(true)}
+            onClick={onOpenDetails}
             className="p-2 rounded-full hover:bg-gray-200"
             title="Conversation Details"
           >
@@ -188,20 +172,6 @@ export default function ChatCrossBar({
           </button>
         </div>
       </div>
-
-      {/* Conversation Details Modal */}
-      {detailsModalOpen && (
-        <ConversationDetailsModal
-          conversation={conversation}
-          currentUserId={currentUserId}
-          onClose={() => setDetailsModalOpen(false)}
-          fetchMembers={fetchConversationMembers}
-          fetchMedia={fetchConversationMedia}
-          fetchFiles={fetchConversationFiles}
-          fetchLinks={fetchConversationLinks}
-          onConversationUpdated={onConversationUpdated}
-        />
-      )}
     </div>
   );
 }

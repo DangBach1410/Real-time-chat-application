@@ -18,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.mongodb.core.MongoTemplate;
 import org.springframework.http.ResponseEntity;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -282,5 +283,130 @@ public class MessageServiceImpl implements MessageService {
         );
 
         ResponseEntity.ok(response);
+    }
+    @Override
+    public ResponseEntity<List<MessageResponse>> searchMessages(
+            String conversationId,
+            String keyword,
+            int page,
+            int size
+    ) {
+        Pageable pageable = PageRequest.of(page, size);
+
+        List<MessageResponse> results = messageRepository
+                .findByConversationIdAndTypeAndContentContainingIgnoreCaseOrderByCreatedAtDesc(
+                        conversationId,
+                        "text",
+                        keyword,
+                        pageable
+                )
+                .getContent()
+                .stream()
+                .map(m -> modelMapper.map(m, MessageResponse.class))
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(results);
+    }
+    @Override
+    public ResponseEntity<List<MessageResponse>> getMessageContext(
+            String conversationId,
+            String messageId,
+            int before,
+            int after
+    ) {
+        MessageEntity pivot = mongoTemplate.findById(messageId, MessageEntity.class);
+        if (pivot == null) return ResponseEntity.ok(List.of());
+
+        LocalDateTime pivotTime = pivot.getCreatedAt();
+
+        // BEFORE: lấy những message có createdAt < pivotTime, sort DESC, limit = before
+        Query beforeQuery = new Query(
+                Criteria.where("conversationId").is(conversationId)
+                        .and("createdAt").lt(pivotTime)
+        )
+                .with(Sort.by(Sort.Direction.DESC, "createdAt"))
+                .limit(before);
+
+        List<MessageEntity> beforeMessages = mongoTemplate.find(beforeQuery, MessageEntity.class);
+        // đảo về thứ tự tăng dần để FE render từ cũ -> mới
+        beforeMessages.sort((a, b) -> a.getCreatedAt().compareTo(b.getCreatedAt()));
+
+        // AFTER: lấy những message có createdAt > pivotTime, sort ASC, limit = after
+        Query afterQuery = new Query(
+                Criteria.where("conversationId").is(conversationId)
+                        .and("createdAt").gt(pivotTime)
+        )
+                .with(Sort.by(Sort.Direction.ASC, "createdAt"))
+                .limit(after);
+
+        List<MessageEntity> afterMessages = mongoTemplate.find(afterQuery, MessageEntity.class);
+
+        // Map sang DTO và gộp: before + pivot + after
+        List<MessageResponse> result = new ArrayList<>();
+
+        result.addAll(beforeMessages.stream()
+                .map(m -> modelMapper.map(m, MessageResponse.class))
+                .collect(Collectors.toList()));
+
+        result.add(modelMapper.map(pivot, MessageResponse.class));
+
+        result.addAll(afterMessages.stream()
+                .map(m -> modelMapper.map(m, MessageResponse.class))
+                .collect(Collectors.toList()));
+
+        return ResponseEntity.ok(result);
+    }
+
+    @Override
+    public ResponseEntity<List<MessageResponse>> getOldMessages(
+            String conversationId,
+            String beforeMessageId,
+            int limit
+    ) {
+        MessageEntity pivot = mongoTemplate.findById(beforeMessageId, MessageEntity.class);
+        if (pivot == null) return ResponseEntity.ok(List.of());
+
+        Query query = new Query(
+                Criteria.where("conversationId").is(conversationId)
+                        .and("createdAt").lt(pivot.getCreatedAt())
+        )
+                .with(Sort.by(Sort.Direction.DESC, "createdAt"))
+                .limit(limit);
+
+        List<MessageEntity> messages = mongoTemplate.find(query, MessageEntity.class);
+
+        // Đảo ngược để trả theo thứ tự thời gian tăng dần (cũ -> mới)
+        messages.sort((a, b) -> a.getCreatedAt().compareTo(b.getCreatedAt()));
+
+        List<MessageResponse> response = messages.stream()
+                .map(m -> modelMapper.map(m, MessageResponse.class))
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(response);
+    }
+
+    @Override
+    public ResponseEntity<List<MessageResponse>> getNewMessages(
+            String conversationId,
+            String afterMessageId,
+            int limit
+    ) {
+        MessageEntity pivot = mongoTemplate.findById(afterMessageId, MessageEntity.class);
+        if (pivot == null) return ResponseEntity.ok(List.of());
+
+        Query query = new Query(
+                Criteria.where("conversationId").is(conversationId)
+                        .and("createdAt").gt(pivot.getCreatedAt())
+        )
+                .with(Sort.by(Sort.Direction.ASC, "createdAt"))
+                .limit(limit);
+
+        List<MessageEntity> messages = mongoTemplate.find(query, MessageEntity.class);
+
+        List<MessageResponse> response = messages.stream()
+                .map(m -> modelMapper.map(m, MessageResponse.class))
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(response);
     }
 }

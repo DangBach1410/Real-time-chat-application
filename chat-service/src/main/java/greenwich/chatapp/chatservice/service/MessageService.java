@@ -22,4 +22,28 @@ public interface MessageService {
                            String senderFullName,
                            String senderImageUrl,
                            String callType);
+    ResponseEntity<List<MessageResponse>> searchMessages(
+            String conversationId,
+            String keyword,
+            int page,
+            int size
+    );
+    ResponseEntity<List<MessageResponse>> getMessageContext(
+            String conversationId,
+            String messageId,
+            int before,
+            int after
+    );
+
+    ResponseEntity<List<MessageResponse>> getOldMessages(
+            String conversationId,
+            String beforeMessageId,
+            int limit
+    );
+
+    ResponseEntity<List<MessageResponse>> getNewMessages(
+            String conversationId,
+            String afterMessageId,
+            int limit
+    );
 }
