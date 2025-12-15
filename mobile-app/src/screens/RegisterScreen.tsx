@@ -9,7 +9,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from "react-native";
-import Ionicons from "react-native-vector-icons/Ionicons";
+import { Eye, EyeOff } from "lucide-react-native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
 import { useNavigation } from "@react-navigation/native";
 import { register } from "../api/authApi";
@@ -139,17 +139,19 @@ export default function RegisterScreen() {
                 onChangeText={(t) => handleChange("password", t)}
                 autoCapitalize="none"
               />
+
               <TouchableOpacity
                 onPress={() => setShowPassword(!showPassword)}
                 style={styles.eyeIcon}
               >
-                <Ionicons
-                  name={showPassword ? "eye-off" : "eye"}
-                  size={22}
-                  color="#555"
-                />
+                {showPassword ? (
+                  <EyeOff size={22} color="#555" />
+                ) : (
+                  <Eye size={22} color="#555" />
+                )}
               </TouchableOpacity>
             </View>
+
             {fieldErrors.password && (
               <Text style={styles.fieldError}>{fieldErrors.password}</Text>
             )}
@@ -173,14 +175,37 @@ const styles = StyleSheet.create({
   container: { flexGrow: 1, justifyContent: "center", padding: 20 },
   card: { backgroundColor: "#fff", padding: 20, borderRadius: 10, elevation: 3 },
   title: { fontSize: 24, fontWeight: "700", textAlign: "center", marginBottom: 20 },
+
   inputBox: { marginBottom: 12 },
   label: { fontSize: 14, marginBottom: 5 },
-  input: { borderWidth: 1, borderRadius: 8, padding: 10, borderColor: "#ccc" },
+
+  input: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 10,
+    borderColor: "#ccc",
+  },
+
   passwordContainer: { position: "relative" },
-  eyeIcon: { position: "absolute", right: 10, top: "50%", transform: [{ translateY: -11 }] },
-  button: { backgroundColor: "green", padding: 12, borderRadius: 8, marginTop: 10 },
+
+  eyeIcon: {
+    position: "absolute",
+    right: 10,
+    top: "50%",
+    transform: [{ translateY: -11 }],
+  },
+
+  button: {
+    backgroundColor: "green",
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 10,
+  },
+
   buttonText: { color: "#fff", textAlign: "center", fontWeight: "600" },
+
   footerText: { marginTop: 15, textAlign: "center", color: "#1d4ed8" },
+
   errorBox: {
     backgroundColor: "#fee2e2",
     color: "#b91c1c",
@@ -189,5 +214,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     textAlign: "center",
   },
+
   fieldError: { color: "#dc2626", marginTop: 4, fontSize: 12 },
 });

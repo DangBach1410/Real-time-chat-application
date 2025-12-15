@@ -109,7 +109,7 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
   if (!user) return null;
 
   return (
-    <ChatContext.Provider value={{ user, keyword, currentUserId }}>
+    <ChatContext.Provider value={{ user, keyword, currentUserId, setUser }}>
       <View style={{ flex: 1 }}>
         {/* <Navbar onSearch={(kw) => setKeyword(kw)} fullName={user.fullName} imageUrl={user.imageUrl} /> */}
 

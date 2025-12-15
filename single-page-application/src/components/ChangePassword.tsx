@@ -78,7 +78,7 @@ export default function ChangePassword({ userId }: ChangePasswordProps) {
             name="oldPassword"
             value={form.oldPassword}
             onChange={handleChange}
-            placeholder="Old Password"
+            placeholder="Old password is required"
             className="w-full p-3 border rounded pr-10"
             required
           />
@@ -99,7 +99,7 @@ export default function ChangePassword({ userId }: ChangePasswordProps) {
             name="newPassword"
             value={form.newPassword}
             onChange={handleChange}
-            placeholder="New Password"
+            placeholder="New password is required"
             className="w-full p-3 border rounded pr-10"
             required
           />
@@ -120,7 +120,7 @@ export default function ChangePassword({ userId }: ChangePasswordProps) {
             name="confirmPassword"
             value={form.confirmPassword}
             onChange={handleChange}
-            placeholder="Confirm New Password"
+            placeholder="Confirm password is required"
             className="w-full p-3 border rounded pr-10"
             required
           />

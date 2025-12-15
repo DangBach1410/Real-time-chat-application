@@ -6,6 +6,7 @@ type ChatContextType = {
   user: UserResponse;
   keyword: string;
   currentUserId: string;
+  setUser: (u: UserResponse) => void;
 };
 
 export const ChatContext = createContext<ChatContextType | undefined>(undefined);
