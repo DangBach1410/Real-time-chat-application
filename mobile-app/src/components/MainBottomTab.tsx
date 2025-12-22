@@ -1,48 +1,44 @@
 // MainBottomTab.tsx
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-import { Text, ScrollView } from "react-native";
-import { useChatContext } from "../context/ChatContext";
 import SearchUserScreen from "../screens/SearchUserScreen";
 import ProfileScreen from "../screens/ProfileScreen";
+import HomeTab from "./HomeTab";
+import { MaterialIcons } from "@expo/vector-icons";
 
 const Tab = createBottomTabNavigator();
 
-export default function MainBottomTab({ scrollRef }: { scrollRef: React.RefObject<ScrollView | null> }) {
-  const { user } = useChatContext();
-
-  const HomeTab = () => (
-    <ScrollView ref={scrollRef} style={{ flex: 1, padding: 16 }}>
-      <Text>Hello, {user.fullName}</Text>
-      <Text>User info demo...</Text>
-    </ScrollView>
-  );
-
+export default function MainBottomTab({ scrollRef }: { scrollRef: React.RefObject<any> }) {
   return (
     <Tab.Navigator
-      screenOptions={{ headerShown: false }}
-      screenListeners={{
-        tabPress: (e) => {
-          if (e.target?.endsWith("Home")) {
-            // scroll lên đầu khi bấm lại tab Home
-            scrollRef.current?.scrollTo({ y: 0, animated: true });
-          }
-        },
+      screenOptions={{
+        headerShown: false,
+        tabBarActiveTintColor: "#3b82f6",
+        tabBarInactiveTintColor: "#9ca3af",
       }}
     >
       <Tab.Screen
         name="Home"
         component={HomeTab}
-        options={{ tabBarIcon: () => <Text>🏠</Text> }}
+        options={{
+          tabBarIcon: ({ color }) => <MaterialIcons name="home" size={24} color={color} />,
+          tabBarLabel: "Chats",
+        }}
       />
       <Tab.Screen
         name="Search"
         component={SearchUserScreen}
-        options={{ tabBarIcon: () => <Text>🔍</Text> }}
+        options={{
+          tabBarIcon: ({ color }) => <MaterialIcons name="search" size={24} color={color} />,
+          tabBarLabel: "Search",
+        }}
       />
       <Tab.Screen
         name="Profile"
         component={ProfileScreen}
-        options={{ tabBarIcon: () => <Text>👤</Text> }}
+        options={{
+          tabBarIcon: ({ color }) => <MaterialIcons name="person" size={24} color={color} />,
+          tabBarLabel: "Profile",
+        }}
       />
     </Tab.Navigator>
   );

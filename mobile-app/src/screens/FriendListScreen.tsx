@@ -40,7 +40,7 @@ export default function FriendListScreen() {
   const confirmUnfriend = (id: string, name?: string) => {
     Alert.alert(
       "Unfriend",
-      `Remove ${name || "this user"}?`,
+      `Are you sure you want to unfriend ${name || "this user"}?`,
       [
         { text: "Cancel", style: "cancel" },
         {
@@ -170,6 +170,7 @@ const styles = StyleSheet.create({
     backgroundColor: "#e63946",
     padding: 8,
     borderRadius: 10,
+    alignSelf: "center",
   },
 
   empty: {

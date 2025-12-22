@@ -5,4 +5,12 @@ export type AuthStackParamList = {
 
 export type MainStackParamList = {
   Chat: undefined;
+  ConversationChat: {
+    conversationId: string;
+    conversationName: string;
+  };
+  EditProfile: undefined;
+  ChangePassword: undefined;
+  FriendList: undefined;
+  FriendRequests: undefined;
 };

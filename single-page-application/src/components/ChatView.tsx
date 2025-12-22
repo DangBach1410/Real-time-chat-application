@@ -155,6 +155,33 @@ export default function ChatView({
       else setSearchResults((prev) => [...prev, ...res]);
       setSearchHasMore(res.length === PAGE_SIZE);
       setSearchPage(page + 1);
+
+      // Fetch presence for search results
+      const userIds = res
+        .map((c) =>
+          c.type === "private"
+            ? c.members.find((m) => m.userId !== userId)?.userId
+            : c.members.map((m) => m.userId)
+        )
+        .flat()
+        .filter(Boolean) as string[];
+
+      const presenceResults: Record<string, number> = {};
+      await Promise.all(
+        userIds.map(async (id) => {
+          try {
+            const res = await getPresence(id);
+            presenceResults[id] = res.data.lastSeen;
+          } catch (err) {
+            console.error("Failed to fetch presence for", id);
+          }
+        })
+      );
+
+      setUsersPresence((prev) => ({
+        ...prev,
+        ...presenceResults,
+      }));
     } catch (err) {
       console.error(err);
     } finally {
@@ -654,7 +681,7 @@ export default function ChatView({
     // scroll search results
     if (searchQuery.trim() !== "") {
       if (searchHasMore && !searchLoading) {
-      loadSearchResults(searchPage);
+        loadSearchResults(searchPage);
       }
       return;
     }
@@ -667,6 +694,33 @@ export default function ChatView({
         setConversations((prev) => [...prev, ...more]);
         setConvPage((prev) => prev + 1);
         setConvHasMore(more.length === PAGE_SIZE);
+
+        // Fetch presence for newly loaded conversations
+        const userIds = more
+          .map((c) =>
+            c.type === "private"
+              ? c.members.find((m) => m.userId !== userId)?.userId
+              : c.members.map((m) => m.userId)
+          )
+          .flat()
+          .filter(Boolean) as string[];
+
+        const presenceResults: Record<string, number> = {};
+        await Promise.all(
+          userIds.map(async (id) => {
+            try {
+              const res = await getPresence(id);
+              presenceResults[id] = res.data.lastSeen;
+            } catch (err) {
+              console.error("Failed to fetch presence for", id);
+            }
+          })
+        );
+
+        setUsersPresence((prev) => ({
+          ...prev,
+          ...presenceResults,
+        }));
       } catch (err) {
         console.error("Failed to load more conversations:", err);
       } finally {
@@ -1034,43 +1088,47 @@ export default function ChatView({
   const getLastMessagePreview = (c: ConversationResponse) => {
     if (!c.lastMessage) return "No messages yet";
     const { type, sender, content } = c.lastMessage;
+    const isOwn = sender.userId === userId;
+    const senderName = isOwn ? "You" : sender.fullName;
 
     if (type === "notification") {
-      if (sender.userId === userId) {
-        return `You ${content}`;
-      } else {
-        return sender.fullName ? `${sender.fullName} ${content}` : content;
-      }
+      return `${senderName} ${content}`;
     }
 
     if (type === "text") {
-      if (sender.userId === userId) {return `You: ${content}`;
-      } else {
-        return `${sender.fullName}: ${content}`;
-      }
+      return `${senderName}: ${content}`;
     }
-    if (type === "video_call")
-      return `${sender.fullName} started a video call`;
-    if (type === "audio_call")
-      return `${sender.fullName} started an audio call`;
-    if (type === "link") return `${sender.fullName} have send a link`;
+    
+    if (type === "video_call") {
+      return isOwn ? "You started a video call" : `${senderName} started a video call`;
+    }
+    
+    if (type === "audio_call") {
+      return isOwn ? "You started an audio call" : `${senderName} started an audio call`;
+    }
+    
+    if (type === "link") {
+      return isOwn ? "You sent a link" : `${senderName} sent a link`;
+    }
+    
     if (type === "media") {
       try {
         const parsed = JSON.parse(content);
         if (parsed.mediaType === "image")
-          return `${sender.fullName} have send an image`;
+          return isOwn ? "You sent an image" : `${senderName} sent an image`;
         if (parsed.mediaType === "audio")
-          return `${sender.fullName} have send an audio`;
+          return isOwn ? "You sent an audio" : `${senderName} sent an audio`;
         if (parsed.mediaType === "file")
-          return `${sender.fullName} have send a file`;
+          return isOwn ? "You sent a file" : `${senderName} sent a file`;
         if (parsed.mediaType === "video")
-          return `${sender.fullName} have send a video`;
-        return `${sender.fullName} have send a media`;
+          return isOwn ? "You sent a video" : `${senderName} sent a video`;
+        return isOwn ? "You sent a media" : `${senderName} sent a media`;
       } catch {
-        return `${sender.fullName} have send a media`;
+        return isOwn ? "You sent a media" : `${senderName} sent a media`;
       }
     }
-    return `${sender.fullName} have send a message`;
+    
+    return isOwn ? "You sent a message" : `${senderName} sent a message`;
   };
 
   if (!userId) {
