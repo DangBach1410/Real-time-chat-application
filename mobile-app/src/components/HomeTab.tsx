@@ -366,8 +366,7 @@ export default function HomeTab() {
           setSearchResults([]);
           setSearchQuery("");
           navigation.navigate("ConversationChat", {
-            conversationId: c.id,
-            conversationName: displayName,
+            conversation: c,
           });
         }}
         style={{

@@ -26,14 +26,16 @@ import {
 import * as StompJs from "@stomp/stompjs";
 import SockJS from "sockjs-client";
 import { normalizeImageUrl } from "../utils/image";
-import { Video, Audio } from "expo-av";
-import * as FileSystem from "expo-file-system";
-import * as Sharing from "expo-sharing";
-import { useWindowDimensions, Modal } from "react-native";
 import { DEFAULT_AVATAR } from "../constants/common";
 import ChatHeader from "../components/ChatHeader";
+import AudioMessage from "../components/AudioMessage";
+import ImageMessage from "../components/ImageMessage";
+import VideoMessage from "../components/VideoMessage";
+import FileMessage from "../components/FileMessage";
+import TypingIndicator from "../components/TypingIndicator";
 
 const PAGE_SIZE = 20;
+const LINK_CARD_WIDTH = 300;
 
 const styles = StyleSheet.create({
   row: { flexDirection: "row", marginVertical: 2, paddingHorizontal: 12 },
@@ -45,8 +47,7 @@ const styles = StyleSheet.create({
   nameText: { fontSize: 12, color: "#6b7280", marginBottom: 4 },
   image: { width: 320, height: 320, borderRadius: 8 },
   videoBox: { width: 200, height: 200, backgroundColor: "#000", borderRadius: 8, justifyContent: "center", alignItems: "center", overflow: "hidden" },
-  mediaRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingVertical: 8 },
-  fileRow: { flexDirection: "row", alignItems: "center", gap: 8, paddingHorizontal: 12, paddingVertical: 8 },
+  mediaRow: { flexDirection: "row", gap: 8, paddingHorizontal: 12, paddingVertical: 8 },
 });
 
 // Helper: merge two message arrays, remove duplicates, sort ascending by createdAt
@@ -126,31 +127,19 @@ const renderMessageContent = (m: MessageResponse, isOwn: boolean) => {
     case "link":
       try {
         const meta = JSON.parse(m.content);
-        return (
-          <TouchableOpacity
-            style={{
-              borderWidth: 1,
-              borderColor: "#e5e7eb",
-              borderRadius: 12,
-              overflow: "hidden",
-              maxWidth: "80%",
-              alignSelf: isOwn ? "flex-end" : "flex-start",
-              backgroundColor: isOwn ? "#2563eb" : "#f3f4f6",
-            }}
-            onPress={() => Linking.openURL(meta.url)}
-          >
-            {meta.image && <Image source={{ uri: meta.image }} style={{ width: "100%", height: 120 }} />}
-            <View style={{ padding: 10 }}>
-              {meta.title && <Text style={{ fontWeight: "600", fontSize: 13, color: isOwn ? "#fff" : "#000", marginBottom: 4 }} numberOfLines={2}>{meta.title}</Text>}
-              {meta.description && <Text style={{ fontSize: 11, color: isOwn ? "#e0e7ff" : "#666", marginBottom: 6 }} numberOfLines={2}>{meta.description}</Text>}
-              <Text style={{ fontSize: 11, color: isOwn ? "#93c5fd" : "#3b82f6", textDecorationLine: "underline" }} numberOfLines={1}>{meta.url}</Text>
-            </View>
-          </TouchableOpacity>
-        );
+        return <LinkPreview meta={meta} isOwn={isOwn} />;
       } catch {
         return (
-          <TouchableOpacity onPress={() => Linking.openURL(m.content)} style={{ alignSelf: isOwn ? "flex-end" : "flex-start" }}>
-            <Text style={{ color: isOwn ? "#93c5fd" : "#3b82f6", fontSize: 12, textDecorationLine: "underline" }}>{m.content}</Text>
+          <TouchableOpacity onPress={() => Linking.openURL(m.content)}>
+            <Text
+              style={{
+                color: "#2563eb",
+                textDecorationLine: "underline",
+                fontSize: 12,
+              }}
+            >
+              {m.content}
+            </Text>
           </TouchableOpacity>
         );
       }
@@ -160,162 +149,51 @@ const renderMessageContent = (m: MessageResponse, isOwn: boolean) => {
   }
 };
 
-// Image message with dynamic sizing and fullscreen viewer
-function ImageMessage({ url, isOwn }: { url?: string; isOwn?: boolean }) {
-  const [modalVisible, setModalVisible] = useState(false);
-  const [size, setSize] = useState<{ width: number; height: number } | null>(null);
-  const { width: screenWidth } = useWindowDimensions();
-
-  useEffect(() => {
-    if (!url) return;
-    let mounted = true;
-    Image.getSize(
-      url,
-      (w, h) => {
-        if (!mounted) return;
-        // cap to a more reasonable width so images don't dominate the chat
-        const maxW = Math.min(screenWidth * 0.6, w, 320);
-        const ratio = h / w;
-        setSize({ width: maxW, height: Math.round(maxW * ratio) });
-      },
-      () => {
-        if (!mounted) return;
-        setSize({ width: Math.min(screenWidth * 0.6, 320), height: 200 });
-      }
-    );
-    return () => {
-      mounted = false;
-    };
-  }, [url, screenWidth]);
+// Link preview component with load/error logging and fallback
+function LinkPreview({ meta, isOwn }: { meta: any; isOwn: boolean }) {
+  const imageUri = meta.image;
 
   return (
-    <>
-      {url ? (
-        <View style={{ alignSelf: isOwn ? "flex-end" : "flex-start", marginVertical: 6 }}>
-          <TouchableOpacity onPress={() => setModalVisible(true)}>
-            <Image source={{ uri: url }} style={[{ width: size?.width || 200, height: size?.height || 200, borderRadius: 8 }, { resizeMode: "cover" }]} />
-          </TouchableOpacity>
-        </View>
-      ) : (
-        <Text style={{ color: "#dc2626" }}>Invalid image</Text>
-      )}
-      <Modal visible={modalVisible} transparent={true} animationType="fade">
-        <View style={{ flex: 1, backgroundColor: "rgba(0,0,0,0.9)", justifyContent: "center", alignItems: "center" }}>
-          <TouchableOpacity style={{ position: "absolute", top: 40, right: 20 }} onPress={() => setModalVisible(false)}>
-            <Text style={{ color: "#fff", fontSize: 18 }}>Close</Text>
-          </TouchableOpacity>
-          <Image source={{ uri: url }} style={{ width: screenWidth, height: screenWidth, resizeMode: "contain" }} />
-        </View>
-      </Modal>
-    </>
-  );
-}
+    <TouchableOpacity
+      activeOpacity={0.85}
+      onPress={() => Linking.openURL(meta.url)}
+      style={{
+        width: LINK_CARD_WIDTH,
+        borderRadius: 16,
+        overflow: "hidden",
+        borderWidth: 1,
+        borderColor: "#e5e7eb",
+        backgroundColor: "#f9fafb",
+        alignSelf: isOwn ? "flex-end" : "flex-start",
+      }}
+    >
+      {imageUri ? (
+        <>
+          <Image
+            source={{ uri: imageUri }}
+            style={{ width: LINK_CARD_WIDTH, aspectRatio: 16 / 9, resizeMode: "cover" }}
+          />
+        </>
+      ) : null}
 
-// Audio inline player (basic)
-function AudioMessage({ url, isOwn }: { url?: string; isOwn?: boolean }) {
-  const soundRef = useRef<any>(null);
-  const [playing, setPlaying] = useState(false);
-  const [loadingAudio, setLoadingAudio] = useState(false);
-
-  const toggle = async () => {
-    if (!url) return;
-    try {
-      if (!soundRef.current) {
-        setLoadingAudio(true);
-        const { sound } = await Audio.Sound.createAsync({ uri: url }, { shouldPlay: true });
-        soundRef.current = sound;
-        setPlaying(true);
-        setLoadingAudio(false);
-        sound.setOnPlaybackStatusUpdate((status: any) => {
-          if (status.didJustFinish) {
-            setPlaying(false);
-            soundRef.current = null;
-          }
-        });
-      } else {
-        if (playing) {
-          await soundRef.current.pauseAsync();
-          setPlaying(false);
-        } else {
-          await soundRef.current.playAsync();
-          setPlaying(true);
-        }
-      }
-    } catch (err) {
-      console.error("Audio play error:", err);
-      setLoadingAudio(false);
-    }
-  };
-
-  useEffect(() => {
-    return () => {
-      if (soundRef.current) {
-        soundRef.current.unloadAsync?.();
-        soundRef.current = null;
-      }
-    };
-  }, []);
-
-  return (
-    <View style={{ alignSelf: isOwn ? "flex-end" : "flex-start", marginVertical: 6 }}>
-      <TouchableOpacity style={styles.mediaRow} onPress={toggle}>
-        <MaterialIcons name={playing ? "pause" : "play-arrow"} size={24} color="#000" />
-        <Text style={{ fontSize: 12, color: "#000", marginLeft: 8 }}>{loadingAudio ? "Loading..." : playing ? "Playing" : (url ? "Play audio" : "Invalid audio")}</Text>
-      </TouchableOpacity>
-    </View>
-  );
-}
-
-// Video inline player using expo-av Video
-function VideoMessage({ url, isOwn }: { url?: string; isOwn?: boolean }) {
-  const { width: screenWidth } = useWindowDimensions();
-  const videoWidth = Math.min(screenWidth * 0.6, 640);
-  const videoHeight = Math.round(videoWidth * (9 / 16));
-
-  return (
-    <View style={{ alignSelf: isOwn ? "flex-end" : "flex-start", marginVertical: 6 }}>
-      <View style={{ width: videoWidth, height: videoHeight }}>
-        {url ? (
-          <Video source={{ uri: url }} style={{ width: videoWidth, height: videoHeight }} useNativeControls resizeMode="contain" />
-        ) : (
-          <View style={{ width: videoWidth, height: videoHeight, justifyContent: "center", alignItems: "center" }}><Text style={{ color: "#fff" }}>Invalid video</Text></View>
+      <View style={{ paddingHorizontal: 12, paddingVertical: 10 }}>
+        {meta.title && (
+          <Text style={{ fontSize: 13, fontWeight: "600", color: "#111827", marginBottom: 4 }} numberOfLines={2}>
+            {meta.title}
+          </Text>
         )}
+
+        {meta.description && (
+          <Text style={{ fontSize: 11, color: "#4b5563", marginBottom: 6 }} numberOfLines={2}>
+            {meta.description}
+          </Text>
+        )}
+
+        <Text style={{ fontSize: 11, color: "#2563eb", textDecorationLine: "underline" }} numberOfLines={1}>
+          {meta.url}
+        </Text>
       </View>
-    </View>
-  );
-}
-
-// File message: download and share
-async function downloadAndShareAsync(url: string, name?: string) {
-  try {
-    const filename = name ? name.replace(/[^a-z0-9_.-]/gi, "_") : `file_${Date.now()}`;
-    const base: string = (FileSystem as any).cacheDirectory ?? FileSystem.documentDirectory ?? "";
-    const localUri = `${base}${filename}`;
-
-    // use DownloadResumable to avoid deprecated downloadAsync signature
-    const downloadResumable = FileSystem.createDownloadResumable(url, localUri);
-    const result = await downloadResumable.downloadAsync();
-    const uri = (result as any).uri ?? localUri;
-
-    if (!(await Sharing.isAvailableAsync())) {
-      // fallback to open
-      if (uri) Linking.openURL(uri);
-      return;
-    }
-    await Sharing.shareAsync(uri, { dialogTitle: name || filename });
-  } catch (err) {
-    console.error("Download/share failed:", err);
-  }
-}
-
-function FileMessage({ url, name, isOwn }: { url?: string; name?: string; isOwn?: boolean }) {
-  return (
-    <View style={{ alignSelf: isOwn ? "flex-end" : "flex-start", marginVertical: 6 }}>
-      <TouchableOpacity style={styles.fileRow} onPress={() => url && downloadAndShareAsync(url, name)}>
-        <MaterialIcons name="description" size={20} color="#000" />
-        <Text style={{ fontSize: 12, color: "#000", textDecorationLine: "underline" }}>{name || "Download file"}</Text>
-      </TouchableOpacity>
-    </View>
+    </TouchableOpacity>
   );
 }
 
@@ -366,9 +244,8 @@ export default function ConversationChatScreen() {
   const { user, currentUserId } = useChatContext();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { conversationId } = route.params;
-
-  const [conversation, setConversation] = useState<ConversationResponse | null>(null);
+  const { conversation } = route.params as { conversation: ConversationResponse };
+  const conversationId = conversation.id;
   const [messages, setMessages] = useState<MessageResponse[]>([]);
   const [loading, setLoading] = useState(false);
   const [newMessage, setNewMessage] = useState("");
@@ -382,22 +259,6 @@ export default function ConversationChatScreen() {
   const flatListRef = useRef<FlatList | null>(null);
   const isLoadingRef = useRef(false);
   const contentHeightRef = useRef(0);
-
-  // Load conversation details
-  useEffect(() => {
-    const loadConversation = async () => {
-      try {
-        const convs = await fetchConversations(currentUserId, 0, 100);
-        const conv = convs.find((c) => c.id === conversationId);
-        if (conv) {
-          setConversation(conv);
-        }
-      } catch (err) {
-        console.error("Failed to load conversation:", err);
-      }
-    };
-    loadConversation();
-  }, [conversationId, currentUserId]);
 
   // Load initial messages
   useEffect(() => {
@@ -451,17 +312,22 @@ export default function ConversationChatScreen() {
         }
       });
 
-      client.subscribe(`/topic/conversations/${conversationId}/typing`, (message) => {
-        try {
-          const data = JSON.parse(message.body);
-          setTypingUsers((prev) => ({
-            ...prev,
-            [data.userId]: data.typing,
-          }));
-        } catch (err) {
-          console.error("Failed to parse typing event:", err);
+      client.subscribe(
+        `/topic/conversations/${conversationId}/typing`,
+        (message) => {
+          try {
+            const { userId: typingUserId, typing } = JSON.parse(message.body);
+            if (typingUserId === currentUserId) return; // bỏ qua self
+
+            setTypingUsers((prev) => ({
+              ...prev,
+              [typingUserId]: typing,
+            }));
+          } catch (err) {
+            console.error("Failed to parse typing event", err);
+          }
         }
-      });
+      );
     };
 
     client.activate();
@@ -599,8 +465,22 @@ export default function ConversationChatScreen() {
     if (m.type === "notification") return renderMessageContent(m, isOwn);
 
     const idx = messages.indexOf(m);
-    const prev = messages[idx - 1];
-    const next = messages[idx + 1];
+    let prev: MessageResponse | undefined = undefined;
+    for (let i = idx - 1; i >= 0; i--) {
+      if (messages[i].type !== "notification") {
+        prev = messages[i];
+        break;
+      }
+    }
+
+    let next: MessageResponse | undefined = undefined;
+    for (let i = idx + 1; i < messages.length; i++) {
+      if (messages[i].type !== "notification") {
+        next = messages[i];
+        break;
+      }
+    }
+
     const isFirstInGroup = !prev || prev.sender.userId !== m.sender.userId;
     const isLastInGroup = !next || next.sender.userId !== m.sender.userId;
 
@@ -617,9 +497,7 @@ export default function ConversationChatScreen() {
 
   const activeTypingUsers = Object.entries(typingUsers)
     .filter(([_, isTyping]) => isTyping)
-    .map(([uid]) => {
-      return conversation?.members.find((m) => m.userId === uid);
-    })
+    .map(([uid]) => conversation?.members.find((m) => m.userId === uid))
     .filter(Boolean);
 
   return (
@@ -646,6 +524,10 @@ export default function ConversationChatScreen() {
             keyExtractor={(item) => item.id}
             onScroll={handleScroll}
             scrollEventThrottle={16}
+            maintainVisibleContentPosition={{
+              minIndexForVisible: 1,
+              autoscrollToTopThreshold: -1,
+            }}
             initialNumToRender={20}
             maxToRenderPerBatch={20}
             windowSize={21}
@@ -673,22 +555,7 @@ export default function ConversationChatScreen() {
 
         {/* Typing Indicator */}
         {activeTypingUsers.length > 0 && (
-          <View style={{ paddingHorizontal: 12, paddingVertical: 8, flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <View style={{ flexDirection: "row", gap: 4 }}>
-              {activeTypingUsers.map((u) => (
-                <Image
-                  key={u!.userId}
-                  source={{ uri: normalizeImageUrl(u!.imageUrl) || DEFAULT_AVATAR }}
-                  style={{ width: 20, height: 20, borderRadius: 10 }}
-                />
-              ))}
-            </View>
-            <Text style={{ fontSize: 12, color: "#6b7280", fontStyle: "italic" }}>
-              {activeTypingUsers.length === 1
-                ? `${activeTypingUsers[0]!.fullName} is typing...`
-                : "Someone is typing..."}
-            </Text>
-          </View>
+          <TypingIndicator users={activeTypingUsers as any} />
         )}
 
         {errorMsg && (

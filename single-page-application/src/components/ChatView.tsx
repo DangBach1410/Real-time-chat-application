@@ -1089,7 +1089,7 @@ export default function ChatView({
     if (!c.lastMessage) return "No messages yet";
     const { type, sender, content } = c.lastMessage;
     const isOwn = sender.userId === userId;
-    const senderName = isOwn ? "You" : sender.fullName;
+    const senderName = isOwn ? "You" : sender.fullName || "";
 
     if (type === "notification") {
       return `${senderName} ${content}`;
@@ -1360,8 +1360,23 @@ export default function ChatView({
                 {messages.map((m, i) => {
                   const isOwn = m.sender.userId === userId;
                   const isHighlighted = m.id === highlightedMessageId;
-                  const prev = messages[i - 1];
-                  const next = messages[i + 1];
+                  // skip notification messages when determining grouping
+                  let prev = undefined as MessageResponse | undefined;
+                  for (let pi = i - 1; pi >= 0; pi--) {
+                    if (messages[pi].type !== "notification") {
+                      prev = messages[pi];
+                      break;
+                    }
+                  }
+
+                  let next = undefined as MessageResponse | undefined;
+                  for (let ni = i + 1; ni < messages.length; ni++) {
+                    if (messages[ni].type !== "notification") {
+                      next = messages[ni];
+                      break;
+                    }
+                  }
+
                   const isFirstInGroup = !prev || prev.sender.userId !== m.sender.userId;
                   const isLastInGroup = !next || next.sender.userId !== m.sender.userId;
 
