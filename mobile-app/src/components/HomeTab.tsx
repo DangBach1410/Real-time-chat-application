@@ -293,7 +293,7 @@ export default function HomeTab() {
     if (!c.lastMessage) return "No messages yet";
     const { type, sender, content } = c.lastMessage;
     const isOwn = sender.userId === currentUserId;
-    const senderName = isOwn ? "You" : sender.fullName;
+    const senderName = isOwn ? "You" : sender.fullName || "";
 
     if (type === "notification") {
       return `${senderName} ${content}`;

@@ -27,12 +27,6 @@ function VideoMessage({ url, isOwn }: { url?: string; isOwn?: boolean }) {
     player.loop = false;
   });
 
-  const { isPlaying } = useEvent(
-    player,
-    "playingChange",
-    { isPlaying: player.playing }
-  );
-
   return (
     <View
       style={{
@@ -52,7 +46,10 @@ function VideoMessage({ url, isOwn }: { url?: string; isOwn?: boolean }) {
         <VideoView
           style={{ width: "100%", height: "100%" }}
           player={player}
-          allowsFullscreen
+          contentFit="contain"
+          fullscreenOptions={{
+            enable: true,
+          }}
           allowsPictureInPicture
         />
       </View>

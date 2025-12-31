@@ -33,9 +33,23 @@ import ImageMessage from "../components/ImageMessage";
 import VideoMessage from "../components/VideoMessage";
 import FileMessage from "../components/FileMessage";
 import TypingIndicator from "../components/TypingIndicator";
+import * as DocumentPicker from "expo-document-picker";
+import { File } from "expo-file-system";
+import * as ImagePicker from "expo-image-picker";
+import { createMediaMessages } from "../api/chatApi";
+import { useChatAudioRecorder } from "../hooks/useAudioRecorder";
 
 const PAGE_SIZE = 20;
 const LINK_CARD_WIDTH = 300;
+
+function isValidUrl(str: string): boolean {
+  try {
+    new URL(str);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 const styles = StyleSheet.create({
   row: { flexDirection: "row", marginVertical: 2, paddingHorizontal: 12 },
@@ -259,6 +273,7 @@ export default function ConversationChatScreen() {
   const flatListRef = useRef<FlatList | null>(null);
   const isLoadingRef = useRef(false);
   const contentHeightRef = useRef(0);
+  const audioRecorder = useChatAudioRecorder();
 
   // Load initial messages
   useEffect(() => {
@@ -306,7 +321,7 @@ export default function ConversationChatScreen() {
           setMessages((prev) => mergeAndSortMessages(prev, [newMsg]));
           setTimeout(() => {
             flatListRef.current?.scrollToEnd({ animated: true });
-          }, 100);
+          }, 1000);
         } catch (err) {
           console.error("Failed to parse message:", err);
         }
@@ -350,6 +365,98 @@ export default function ConversationChatScreen() {
       }),
     });
   };
+  const assetToFile = (asset: any) => ({
+    uri: asset.uri,
+    name: asset.fileName || asset.uri.split("/").pop() || "file",
+    type: asset.mimeType || "application/octet-stream",
+  }) as any;
+  const handlePickMedia = async () => {
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) return;
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images', 'videos'],
+      allowsMultipleSelection: true,
+      quality: 1,
+    });
+
+    if (result.canceled || !result.assets?.length) return;
+
+    try {
+      const files = result.assets.map(assetToFile);
+
+      await createMediaMessages(
+        conversationId,
+        currentUserId,
+        user.fullName,
+        user.imageUrl || DEFAULT_AVATAR,
+        files
+      );
+
+      // Không setMessages – WebSocket sẽ tự đẩy về
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 1000);
+    } catch (err) {
+      console.error("Send media failed:", err);
+      setErrorMsg("Failed to send media");
+    }
+  };
+
+  const handlePickFile = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        multiple: true,
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled || !result.assets?.length) return;
+
+      const files = result.assets.map(assetToFile);
+
+      await createMediaMessages(
+        conversationId,
+        currentUserId,
+        user.fullName,
+        user.imageUrl || DEFAULT_AVATAR,
+        files
+      );
+
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 1000);
+    } catch (err) {
+      console.error("Pick file failed:", err);
+      setErrorMsg("Failed to send file");
+    }
+  };
+
+  const handleMicPress = async () => {
+    if (audioRecorder.isRecording) {
+      const uri = await audioRecorder.stop();
+      if (!uri) return;
+
+      const file = {
+        uri,
+        name: `audio_${Date.now()}.m4a`,
+        type: "audio/m4a",
+      } as any;
+
+      await createMediaMessages(
+        conversationId,
+        currentUserId,
+        user.fullName,
+        user.imageUrl || DEFAULT_AVATAR,
+        [file]
+      );
+
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 300);
+    } else {
+      audioRecorder.start();
+    }
+  };
 
   const handleInputChange = (text: string) => {
     setNewMessage(text);
@@ -371,22 +478,25 @@ export default function ConversationChatScreen() {
     if (!newMessage.trim() || !conversationId) return;
 
     try {
-      await createTextMessage({
-        conversationId: conversationId,
-        senderId: currentUserId,
-        senderFullName: user.fullName,
-        senderImageUrl: user.imageUrl || DEFAULT_AVATAR,
-        content: newMessage,
-        type: "text",
-      });
+      if (newMessage.trim()) {
+        const isLink = isValidUrl(newMessage.trim());
+        await createTextMessage({
+          conversationId: conversationId,
+          senderId: currentUserId,
+          senderFullName: user.fullName,
+          senderImageUrl: user.imageUrl || DEFAULT_AVATAR,
+          content: newMessage.trim(),
+          type: isLink ? "link" : "text",
+        });      
 
-      // Don't add message to state here - let WebSocket handle it to avoid duplicates
-      setNewMessage("");
-      setIsTyping(false);
-      sendTypingEvent(false);
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 100);
+        // Don't add message to state here - let WebSocket handle it to avoid duplicates
+        setNewMessage("");
+        setIsTyping(false);
+        sendTypingEvent(false);
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
     } catch (err) {
       console.error("Failed to send message:", err);
       setErrorMsg("Failed to send message");
@@ -569,7 +679,21 @@ export default function ConversationChatScreen() {
             <Text style={{ color: "#dc2626", fontSize: 12 }}>{errorMsg}</Text>
           </View>
         )}
-
+        {audioRecorder.isRecording && (
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              paddingHorizontal: 12,
+              paddingBottom: 6,
+            }}
+          >
+            <MaterialIcons name="fiber-manual-record" size={12} color="#ef4444" />
+            <Text style={{ marginLeft: 6, color: "#ef4444", fontSize: 12 }}>
+              Recording... {Math.floor(audioRecorder.duration / 1000)}s
+            </Text>
+          </View>
+        )}
         {/* Input Area */}
         <View
           style={{
@@ -583,17 +707,21 @@ export default function ConversationChatScreen() {
           }}
         >
           <TouchableOpacity
-            style={{
-              width: 36,
-              height: 36,
-              justifyContent: "center",
-              alignItems: "center",
-            }}
+            onPress={handlePickMedia}
+            style={{ width: 36, height: 36, justifyContent: "center", alignItems: "center" }}
+          >
+            <MaterialIcons name="photo-library" size={20} color="#6b7280" />
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            onPress={handlePickFile}
+            style={{ width: 36, height: 36, justifyContent: "center", alignItems: "center" }}
           >
             <MaterialIcons name="attach-file" size={20} color="#6b7280" />
           </TouchableOpacity>
 
           <TouchableOpacity
+            onPress={handleMicPress}
             style={{
               width: 36,
               height: 36,
@@ -601,7 +729,11 @@ export default function ConversationChatScreen() {
               alignItems: "center",
             }}
           >
-            <MaterialIcons name="mic" size={20} color="#6b7280" />
+            <MaterialIcons
+              name={audioRecorder.isRecording ? "stop-circle" : "mic"}
+              size={22}
+              color={audioRecorder.isRecording ? "#ef4444" : "#6b7280"}
+            />
           </TouchableOpacity>
 
           <TextInput
@@ -615,7 +747,12 @@ export default function ConversationChatScreen() {
               fontSize: 14,
               maxHeight: 100,
             }}
-            placeholder="Type a message..."
+            editable={!audioRecorder.isRecording}
+            placeholder={
+              audioRecorder.isRecording
+                ? "Recording audio..."
+                : "Type a message..."
+            }
             value={newMessage}
             onChangeText={handleInputChange}
             multiline={true}
