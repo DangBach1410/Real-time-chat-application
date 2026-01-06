@@ -6,6 +6,10 @@ import EditProfileScreen from '../screens/EditProfileScreen';
 import ChangePasswordScreen from '../screens/ChangePasswordScreen';
 import FriendListScreen from '../screens/FriendListScreen';
 import FriendRequestsScreen from '../screens/FriendRequestsScreen';
+import NewGroupScreen from '../screens/NewGroupScreen';
+import ConversationDetailsScreen from '../screens/ConversationDetailsScreen';
+import AddMemberScreen from '../screens/AddMemberScreen';
+import ConversationSearchScreen from '../screens/ConversationSearchScreen';
 
 const Stack = createNativeStackNavigator<MainStackParamList>();
 
@@ -21,6 +25,10 @@ export default function MainStack() {
       <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
       <Stack.Screen name="FriendList" component={FriendListScreen} />
       <Stack.Screen name="FriendRequests" component={FriendRequestsScreen} />
+      <Stack.Screen name="NewGroup" component={NewGroupScreen} />
+      <Stack.Screen name="ConversationDetails" component={ConversationDetailsScreen} />
+      <Stack.Screen name="AddMember" component={AddMemberScreen} />
+      <Stack.Screen name="ConversationSearch" component={ConversationSearchScreen} />
     </Stack.Navigator>
   );
 }

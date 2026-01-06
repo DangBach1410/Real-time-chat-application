@@ -19,7 +19,7 @@ import {
 } from "../api/friendApi";
 import { getPrivateConversation } from "../api/chatApi";
 import { DEFAULT_AVATAR } from "../constants/common";
-
+import { normalizeImageUrl } from "../utils/image";
 import {
   UserPlusIcon,
   XCircleIcon,
@@ -28,7 +28,7 @@ import {
 } from "react-native-heroicons/solid";
 
 export default function SearchUserScreen() {
-  const { currentUserId } = useChatContext();
+  const { currentUserId, usersPresence } = useChatContext();
   const navigation = useNavigation<any>();
 
   const [keyword, setKeyword] = useState("");
@@ -72,7 +72,10 @@ export default function SearchUserScreen() {
 
   const goToChat = async (friendId: string) => {
     const conversation = await getPrivateConversation(currentUserId, friendId);
-    navigation.navigate("Chat", { conversationId: conversation.id });
+    navigation.navigate("ConversationChat", {
+      conversation: conversation,
+      usersPresence,
+    });
   };
 
   const updateStatus = (userId: string, status: string) => {
@@ -134,7 +137,7 @@ export default function SearchUserScreen() {
     <View style={styles.card}>
       <View style={styles.userInfo}>
         <Image
-          source={{ uri: item.imageUrl || DEFAULT_AVATAR }}
+          source={{ uri: normalizeImageUrl(item.imageUrl || DEFAULT_AVATAR)}}
           style={styles.avatar}
         />
         <View>

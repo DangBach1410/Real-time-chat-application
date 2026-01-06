@@ -39,7 +39,7 @@ export default function HomeTab() {
   const [convHasMore, setConvHasMore] = useState(true);
   const [searchPage, setSearchPage] = useState(0);
   const [searchHasMore, setSearchHasMore] = useState(true);
-  const [usersPresence, setUsersPresence] = useState<Record<string, number>>({});
+  const { usersPresence, setUsersPresence } = useChatContext();
   const stompClientRef = useRef<StompJs.Client | null>(null);
 
   // Load conversations
@@ -367,6 +367,7 @@ export default function HomeTab() {
           setSearchQuery("");
           navigation.navigate("ConversationChat", {
             conversation: c,
+            usersPresence,
           });
         }}
         style={{
@@ -458,10 +459,16 @@ export default function HomeTab() {
             alignItems: "center",
             gap: 8,
           }}
-          onPress={() => {
-            // TODO: Navigate to Create Group screen or open modal
-            console.log("Create new group");
-          }}
+          onPress={() =>
+            navigation.navigate("NewGroup", {
+              currentUserId,
+              onCreated: (conv: ConversationResponse) => {
+                upsertConversation(conv);
+                navigation.navigate("Chat");
+                navigation.navigate("ConversationChat", { conversation: conv, usersPresence });
+              },
+            })
+          }
         >
           <MaterialIcons name="group-add" size={20} color="#fff" />
           <Text style={{ color: "#fff", fontWeight: "600", fontSize: 14 }}>New Group</Text>

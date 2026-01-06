@@ -29,6 +29,7 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
   const [loading, setLoading] = useState(true);
   const [incomingCall, setIncomingCall] = useState<CallRequest | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string>("");
+  const [usersPresence, setUsersPresence] = useState<Record<string, number>>({});
 
   const navigation = useNavigation<any>();
   const stompClientRef = useRef<Client | null>(null);
@@ -109,12 +110,12 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
   if (!user) return null;
 
   return (
-    <ChatContext.Provider value={{ user, keyword, currentUserId, setUser }}>
+    <ChatContext.Provider value={{ user, keyword, currentUserId, usersPresence, setUsersPresence, setUser }}>
       <View style={{ flex: 1 }}>
         {/* <Navbar onSearch={(kw) => setKeyword(kw)} fullName={user.fullName} imageUrl={user.imageUrl} /> */}
 
         {children}
-{/* 
+        {/* 
         <IncomingCallModal
           open={!!incomingCall}
           callerName={incomingCall?.callerName || ""}

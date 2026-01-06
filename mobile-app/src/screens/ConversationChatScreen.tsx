@@ -20,6 +20,9 @@ import {
   fetchConversations,
   fetchMessages,
   createTextMessage,
+  fetchMessageContext,
+  fetchOldMessages,
+  fetchNewMessages,
   type ConversationResponse,
   type MessageResponse,
 } from "../api/chatApi";
@@ -77,11 +80,31 @@ const mergeAndSortMessages = (
   return arr;
 };
 
+// Helper to render highlighted text
+const renderHighlightedText = (text: string, query: string, isOwn: boolean) => {
+  if (!query) return <Text style={{ color: isOwn ? "#fff" : "#000", fontSize: 14 }}>{text}</Text>;
+
+  const regex = new RegExp(`(${query})`, 'gi');
+  const parts = text.split(regex);
+
+  return (
+    <Text style={{ color: isOwn ? "#fff" : "#000", fontSize: 14 }}>
+      {parts.map((part, index) =>
+        regex.test(part) ? (
+          <Text key={index} style={{ backgroundColor: 'yellow' }}>{part}</Text>
+        ) : (
+          part
+        )
+      )}
+    </Text>
+  );
+};
+
 // Top-level renderer for message content to keep MessageRow small and memo-friendly
-const renderMessageContent = (m: MessageResponse, isOwn: boolean) => {
+const renderMessageContent = (m: MessageResponse, isOwn: boolean, highlightedMessageId: string | null, highlightQuery: string) => {
   switch (m.type) {
     case "text":
-      return <Text style={{ color: isOwn ? "#fff" : "#000", fontSize: 14 }}>{m.content}</Text>;
+      return renderHighlightedText(m.content, m.id === highlightedMessageId ? highlightQuery : "", isOwn);
 
     case "text-translation":
       return (
@@ -217,9 +240,11 @@ type MessageRowProps = {
   isOwn: boolean;
   isFirstInGroup: boolean;
   isLastInGroup: boolean;
+  highlightedMessageId: string | null;
+  highlightQuery: string;
 };
 
-const MessageRow = memo(({ m, isOwn, isFirstInGroup, isLastInGroup }: MessageRowProps) => {
+const MessageRow = memo(({ m, isOwn, isFirstInGroup, isLastInGroup, highlightedMessageId, highlightQuery }: MessageRowProps) => {
   // decide whether this message should have bubble background
   let shouldHaveBg = true;
   if (m.type === "notification") shouldHaveBg = false;
@@ -232,7 +257,7 @@ const MessageRow = memo(({ m, isOwn, isFirstInGroup, isLastInGroup }: MessageRow
   }
 
   return (
-    <View style={[styles.row, { justifyContent: isOwn ? "flex-end" : "flex-start" }]}> 
+    <View style={[styles.row, { justifyContent: isOwn ? "flex-end" : "flex-start" }]}>
       {!isOwn && (
         <View style={styles.avatarWrapper}>
           {isLastInGroup ? (
@@ -246,19 +271,24 @@ const MessageRow = memo(({ m, isOwn, isFirstInGroup, isLastInGroup }: MessageRow
 
         <View style={{ maxWidth: "80%" }}>
           <View style={shouldHaveBg ? (isOwn ? styles.bubbleOwn : styles.bubbleOther) : undefined}>
-            {renderMessageContent(m, isOwn)}
+            {renderMessageContent(m, isOwn, highlightedMessageId, highlightQuery)}
           </View>
         </View>
       </View>
     </View>
   );
-}, (prev, next) => prev.m.id === next.m.id && prev.isOwn === next.isOwn && prev.isFirstInGroup === next.isFirstInGroup && prev.isLastInGroup === next.isLastInGroup);
+}, (prev, next) => prev.m.id === next.m.id && prev.isOwn === next.isOwn && prev.isFirstInGroup === next.isFirstInGroup && prev.isLastInGroup === next.isLastInGroup && prev.highlightedMessageId === next.highlightedMessageId && prev.highlightQuery === next.highlightQuery);
 
 export default function ConversationChatScreen() {
   const { user, currentUserId } = useChatContext();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { conversation } = route.params as { conversation: ConversationResponse };
+  const { conversation, usersPresence, jumpMessage, jumpQuery } = route.params as {
+    conversation: ConversationResponse;
+    usersPresence: Record<string, number>;
+    jumpMessage?: MessageResponse;
+    jumpQuery?: string;
+  };
   const conversationId = conversation.id;
   const [messages, setMessages] = useState<MessageResponse[]>([]);
   const [loading, setLoading] = useState(false);
@@ -268,29 +298,59 @@ export default function ConversationChatScreen() {
   const [hasMore, setHasMore] = useState(true);
   const [typingUsers, setTypingUsers] = useState<Record<string, boolean>>({});
   const [isTyping, setIsTyping] = useState(false);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  const [highlightQuery, setHighlightQuery] = useState<string>("");
   const stompClientRef = useRef<StompJs.Client | null>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const flatListRef = useRef<FlatList | null>(null);
   const isLoadingRef = useRef(false);
   const contentHeightRef = useRef(0);
+  const contextModeRef = useRef(false);
+  const contextPivotRef = useRef<string | null>(null);
+  const contextHasMoreOlderRef = useRef<boolean>(true);
+  const contextHasMoreNewerRef = useRef<boolean>(true);
   const audioRecorder = useChatAudioRecorder();
 
-  // Load initial messages
+  // Load initial messages or jump to message
   useEffect(() => {
     if (!conversationId) return;
 
     const loadMessages = async () => {
       setLoading(true);
       try {
-        const data = await fetchMessages(conversationId, 0, PAGE_SIZE);
-        setMessages(
-          data.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
-        );
-        setPage(1);
-        setHasMore(data.length === PAGE_SIZE);
-        setTimeout(() => {
-          flatListRef.current?.scrollToEnd({ animated: true });
-        }, 500);
+        if (jumpMessage) {
+          // Jump to specific message - context mode
+          contextModeRef.current = true;
+          contextPivotRef.current = jumpMessage.id;
+          contextHasMoreOlderRef.current = true;
+          contextHasMoreNewerRef.current = true;
+          const ctx = await fetchMessageContext(conversationId, jumpMessage.id, PAGE_SIZE, PAGE_SIZE);
+          const sorted = ctx.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+          setMessages(sorted);
+          setHighlightedMessageId(jumpMessage.id);
+          setHighlightQuery(jumpQuery || "");
+          setTimeout(() => {
+            const index = sorted.findIndex(m => m.id === jumpMessage.id);
+            if (index !== -1) {
+              flatListRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
+            }
+          }, 1000);
+        } else {
+          // Normal load
+          contextModeRef.current = false;
+          contextPivotRef.current = null;
+          contextHasMoreOlderRef.current = false;
+          contextHasMoreNewerRef.current = false;
+          const data = await fetchMessages(conversationId, 0, PAGE_SIZE);
+          setMessages(
+            data.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+          );
+          setPage(1);
+          setHasMore(data.length === PAGE_SIZE);
+          setTimeout(() => {
+            flatListRef.current?.scrollToEnd({ animated: true });
+          }, 1000);
+        }
       } catch (err) {
         console.error("Failed to load messages:", err);
       } finally {
@@ -299,7 +359,7 @@ export default function ConversationChatScreen() {
     };
 
     loadMessages();
-  }, [conversationId]);
+  }, [conversationId, jumpMessage, jumpQuery]);
 
   // Connect to WebSocket
   useEffect(() => {
@@ -452,7 +512,7 @@ export default function ConversationChatScreen() {
 
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
-      }, 300);
+      }, 1000);
     } else {
       audioRecorder.start();
     }
@@ -495,7 +555,7 @@ export default function ConversationChatScreen() {
         sendTypingEvent(false);
         setTimeout(() => {
           flatListRef.current?.scrollToEnd({ animated: true });
-        }, 100);
+        }, 1000);
       }
     } catch (err) {
       console.error("Failed to send message:", err);
@@ -504,52 +564,81 @@ export default function ConversationChatScreen() {
     }
   };
 
-  const handleLoadMore = async () => {
-    if (!hasMore || loading || !conversationId) return;
-
-    setLoading(true);
-    try {
-      const more = await fetchMessages(conversationId, page, PAGE_SIZE);
-      if (more.length > 0) {
-        setMessages((prev) => mergeAndSortMessages(prev, more));
-        setPage((prev) => prev + 1);
-        setHasMore(more.length === PAGE_SIZE);
-      } else {
-        setHasMore(false);
-      }
-    } catch (err) {
-      console.error("Failed to load more messages:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   // Load more and preserve scroll position when prepending older messages
   const loadMorePreserveScroll = async (prevContentHeight: number) => {
-    if (!hasMore || loading || !conversationId) return;
+    if (loading || !conversationId) return;
     isLoadingRef.current = true;
     try {
-      const more = await fetchMessages(conversationId, page, PAGE_SIZE);
-      if (more.length > 0) {
-        setMessages((prev) => mergeAndSortMessages(prev, more));
-        setPage((prev) => prev + 1);
-        setHasMore(more.length === PAGE_SIZE);
-
-        // after layout update, adjust scroll so user stays at the same message
-        setTimeout(() => {
-          const newH = contentHeightRef.current || 0;
-          const diff = newH - prevContentHeight;
-          if (diff > 0) {
-            flatListRef.current?.scrollToOffset({ offset: diff, animated: false });
+      if (contextModeRef.current) {
+        // load older messages relative to current first message
+        const firstId = messages[0]?.id;
+        if (firstId) {
+          const older = await fetchOldMessages(conversationId, firstId, PAGE_SIZE);
+          if (older.length > 0) {
+            setMessages((prev) => mergeAndSortMessages(prev, older));
+            // after layout update, adjust scroll so user stays at the same message
+            setTimeout(() => {
+              const newH = contentHeightRef.current || 0;
+              const diff = newH - prevContentHeight;
+              if (diff > 0) {
+                flatListRef.current?.scrollToOffset({ offset: diff, animated: false });
+              }
+            }, 1000);
+          } else {
+            // no more older messages in context mode
+            contextHasMoreOlderRef.current = false;
           }
-        }, 80);
-      } else {
-        setHasMore(false);
+        } else {
+          contextHasMoreOlderRef.current = false;
+        }
+      } else if (hasMore) {
+        const more = await fetchMessages(conversationId, page, PAGE_SIZE);
+        if (more.length > 0) {
+          setMessages((prev) => mergeAndSortMessages(prev, more));
+          setPage((prev) => prev + 1);
+          setHasMore(more.length === PAGE_SIZE);
+
+          // after layout update, adjust scroll so user stays at the same message
+          setTimeout(() => {
+            const newH = contentHeightRef.current || 0;
+            const diff = newH - prevContentHeight;
+            if (diff > 0) {
+              flatListRef.current?.scrollToOffset({ offset: diff, animated: false });
+            }
+          }, 1000);
+        } else {
+          setHasMore(false);
+        }
       }
     } catch (err) {
       console.error("Failed to load more messages:", err);
     } finally {
       isLoadingRef.current = false;
+      setLoading(false);
+    }
+  };
+
+  // Load newer messages when near bottom in context mode
+  const loadNewerMessages = async () => {
+    if (!contextModeRef.current || loading || !contextHasMoreNewerRef.current) return;
+
+    setLoading(true);
+    try {
+      const lastId = messages[messages.length - 1]?.id;
+      if (lastId) {
+        const newer = await fetchNewMessages(conversationId, lastId, PAGE_SIZE);
+        if (newer.length > 0) {
+          setMessages((prev) => mergeAndSortMessages(prev, newer));
+        } else {
+          // no more newer messages in context mode
+          contextHasMoreNewerRef.current = false;
+        }
+      } else {
+        contextHasMoreNewerRef.current = false;
+      }
+    } catch (err) {
+      console.error("Failed to load newer messages:", err);
+    } finally {
       setLoading(false);
     }
   };
@@ -563,16 +652,29 @@ export default function ConversationChatScreen() {
     // Check if scrolled to top (to load older messages)
     const isAtTop = contentOffset.y <= 50; // 50px threshold
 
-    if (isAtTop && !loading && hasMore && !isLoadingRef.current) {
+    if (isAtTop && !loading && !isLoadingRef.current) {
+      if (contextModeRef.current) {
+        if (!contextHasMoreOlderRef.current) return;
+      } else {
+        if (!hasMore) return;
+      }
       // capture previous content height
       const prevHeight = contentSize.height;
       loadMorePreserveScroll(prevHeight);
+    }
+
+    // If near bottom and in context mode: load newer messages
+    const nearBottom = contentSize.height - contentOffset.y - layoutMeasurement.height < 50;
+    if (nearBottom && contextModeRef.current && !loading) {
+      // guard: if we've already determined there are no newer messages, skip
+      if (!contextHasMoreNewerRef.current) return;
+      loadNewerMessages();
     }
   };
   const renderMessageItem = useCallback(({ item: m }: { item: MessageResponse }) => {
     const isOwn = m.sender.userId === currentUserId;
 
-    if (m.type === "notification") return renderMessageContent(m, isOwn);
+    if (m.type === "notification") return renderMessageContent(m, isOwn, highlightedMessageId, highlightQuery);
 
     const idx = messages.indexOf(m);
     let prev: MessageResponse | undefined = undefined;
@@ -594,8 +696,8 @@ export default function ConversationChatScreen() {
     const isFirstInGroup = !prev || prev.sender.userId !== m.sender.userId;
     const isLastInGroup = !next || next.sender.userId !== m.sender.userId;
 
-    return <MessageRow m={m} isOwn={isOwn} isFirstInGroup={isFirstInGroup} isLastInGroup={isLastInGroup} />;
-  }, [messages, currentUserId]);
+    return <MessageRow m={m} isOwn={isOwn} isFirstInGroup={isFirstInGroup} isLastInGroup={isLastInGroup} highlightedMessageId={highlightedMessageId} highlightQuery={highlightQuery} />;
+  }, [messages, currentUserId, highlightedMessageId, highlightQuery]);
 
   // Auto clear error
   useEffect(() => {
@@ -618,7 +720,10 @@ export default function ConversationChatScreen() {
     >
       <ChatHeader
         conversation={conversation}
+        currentUserId={currentUserId}
+        usersPresence={usersPresence}
         onBackPress={() => navigation.goBack()}
+        onOpenDetails={() => navigation.navigate("ConversationDetails", { conversation })}
       />
 
       <View style={{ flex: 1 }}>

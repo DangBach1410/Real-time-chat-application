@@ -45,10 +45,6 @@ export default function ChatCrossBar({
     ? otherUser?.imageUrl || DEFAULT_AVATAR
     : conversation.imageUrl || DEFAULT_AVATAR;
 
-  // const admin = conversation.members.find((m) => m.role === "admin");
-  // const adminId = admin?.userId || null;
-  // const canRemoveMember = adminId === currentUserId;
-
   const diffMinutes =
     lastSeen !== undefined && lastSeen !== null
       ? Math.floor((Date.now() - lastSeen) / 60000)

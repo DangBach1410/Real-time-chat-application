@@ -6,6 +6,8 @@ type ChatContextType = {
   user: UserResponse;
   keyword: string;
   currentUserId: string;
+  usersPresence: Record<string, number>;
+  setUsersPresence: React.Dispatch<React.SetStateAction<Record<string, number>>>;
   setUser: (u: UserResponse) => void;
 };
 
