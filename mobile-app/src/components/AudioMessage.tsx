@@ -47,7 +47,6 @@ function AudioMessage({
     <View
       style={{
         alignSelf: isOwn ? "flex-end" : "flex-start",
-        marginVertical: 6,
       }}
     >
       <TouchableOpacity

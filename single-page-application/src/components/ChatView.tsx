@@ -34,6 +34,7 @@ import {
 } from "../helpers/chatApi";
 import { fetchMessageContext, fetchOldMessages, fetchNewMessages } from "../helpers/chatApi";
 import ConversationDetailsModal from "./ConversationDetailsModal";
+import { startOrJoinCall, type CallRequest } from "../helpers/callApi";
 
 interface ChatViewProps {
   userId: string;
@@ -947,9 +948,40 @@ export default function ChatView({
     }
     if (m.type === "video_call" || m.type === "audio_call") {
       const isVideo = m.type === "video_call";
+
+      // join call giống ChatCrossBar
+      const handleJoinCall = async () => {
+        try {
+          // tìm conversation tương ứng (dùng currentConversation nếu có)
+          const conv = conversations.find((c) => c.id === m.conversationId) || currentConversation;
+          if (!conv) throw new Error("Conversation not found");
+
+          const currentUser = conv.members.find((mem) => mem.userId === userId);
+          if (!currentUser) throw new Error("User not found in conversation");
+
+          const payload: CallRequest = {
+            type: isVideo ? "video" : "audio",
+            conversationId: conv.id,
+            callerId: userId,
+            callerName: currentUser.fullName,
+            callerImage: currentUser.imageUrl || DEFAULT_AVATAR,
+          };
+
+          // yêu cầu server khởi / tham gia cuộc gọi
+          await startOrJoinCall(payload);
+
+          // mở cửa sổ call (giữ cùng format như ChatCrossBar)
+          const url = `/call?channel=${conv.id}&type=${isVideo ? "video" : "audio"}&uid=${userId}`;
+          window.open(url, "_blank", "width=1000,height=700");
+        } catch (err) {
+          console.error("❌ Failed to join call:", err);
+          alert("Failed to join call. Please try again.");
+        }
+      };
+
       return (
         <div
-          onClick={() => alert("Joining call...")}
+          onClick={handleJoinCall}
           className={`flex flex-col items-center justify-center gap-2 px-4 py-3 rounded-2xl text-white cursor-pointer ${
             isVideo ? "bg-purple-700 hover:bg-purple-800" : "bg-indigo-700 hover:bg-indigo-800"
           }`}

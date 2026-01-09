@@ -8,7 +8,6 @@ import { Client } from "@stomp/stompjs";
 import { fetchUserById } from "../api/userApi";
 import type { UserResponse } from "../api/userApi";
 import type { CallRequest } from "../api/callApi";
-// import Navbar from "../components/Navbar";
 // import IncomingCallModal from "../components/IncomingCallModal";
 
 import { ChatContext } from "../context/ChatContext";
@@ -112,7 +111,6 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
   return (
     <ChatContext.Provider value={{ user, keyword, currentUserId, usersPresence, setUsersPresence, setUser }}>
       <View style={{ flex: 1 }}>
-        {/* <Navbar onSearch={(kw) => setKeyword(kw)} fullName={user.fullName} imageUrl={user.imageUrl} /> */}
 
         {children}
         {/* 

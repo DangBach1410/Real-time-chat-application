@@ -1,4 +1,3 @@
-// ConversationChatScreen.tsx
 import React, { useEffect, useRef, useState, useCallback, memo } from "react";
 import {
   View,
@@ -12,6 +11,9 @@ import {
   Platform,
   StyleSheet,
   Linking,
+  Alert,
+  Pressable,
+  TouchableWithoutFeedback,
 } from "react-native";
 import { useChatContext } from "../context/ChatContext";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -26,6 +28,7 @@ import {
   type ConversationResponse,
   type MessageResponse,
 } from "../api/chatApi";
+import { translateMessage } from "../api/translationApi";
 import * as StompJs from "@stomp/stompjs";
 import SockJS from "sockjs-client";
 import { normalizeImageUrl } from "../utils/image";
@@ -41,6 +44,7 @@ import { File } from "expo-file-system";
 import * as ImagePicker from "expo-image-picker";
 import { createMediaMessages } from "../api/chatApi";
 import { useChatAudioRecorder } from "../hooks/useAudioRecorder";
+import * as Clipboard from "expo-clipboard";
 
 const PAGE_SIZE = 20;
 const LINK_CARD_WIDTH = 300;
@@ -65,6 +69,10 @@ const styles = StyleSheet.create({
   image: { width: 320, height: 320, borderRadius: 8 },
   videoBox: { width: 200, height: 200, backgroundColor: "#000", borderRadius: 8, justifyContent: "center", alignItems: "center", overflow: "hidden" },
   mediaRow: { flexDirection: "row", gap: 8, paddingHorizontal: 12, paddingVertical: 8 },
+  actionMenuContainer: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, justifyContent: "center", alignItems: "center" },
+  actionMenuBox: { minWidth: 140, backgroundColor: "#fff", borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12, elevation: 6, shadowColor: "#000", shadowOpacity: 0.12, shadowRadius: 8 },
+  actionMenuItem: { paddingVertical: 10 },
+  actionMenuText: { fontSize: 16, color: "#111827" },
 });
 
 // Helper: merge two message arrays, remove duplicates, sort ascending by createdAt
@@ -73,7 +81,6 @@ const mergeAndSortMessages = (
   incoming: MessageResponse[]
 ) => {
   const map = new Map<string, MessageResponse>();
-  // add all messages into map (keyed by id) so duplicates are removed
   existing.concat(incoming).forEach((m) => map.set(m.id, m));
   const arr = Array.from(map.values());
   arr.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
@@ -242,9 +249,13 @@ type MessageRowProps = {
   isLastInGroup: boolean;
   highlightedMessageId: string | null;
   highlightQuery: string;
+  onLongPress: (
+    m: MessageResponse,
+    layout: { x: number; y: number; width: number; height: number }
+  ) => void;
 };
 
-const MessageRow = memo(({ m, isOwn, isFirstInGroup, isLastInGroup, highlightedMessageId, highlightQuery }: MessageRowProps) => {
+const MessageRow = memo(({ m, isOwn, isFirstInGroup, isLastInGroup, highlightedMessageId, highlightQuery, onLongPress }: MessageRowProps) => {
   // decide whether this message should have bubble background
   let shouldHaveBg = true;
   if (m.type === "notification") shouldHaveBg = false;
@@ -255,6 +266,15 @@ const MessageRow = memo(({ m, isOwn, isFirstInGroup, isLastInGroup, highlightedM
       if (["image", "video", "audio"].includes(parsed.mediaType)) shouldHaveBg = false;
     } catch {}
   }
+
+  // Only text messages are long-press actionable
+  const isActionable = m.type === "text";
+
+  const Bubble = (
+    <View style={shouldHaveBg ? (isOwn ? styles.bubbleOwn : styles.bubbleOther) : undefined}>
+      {renderMessageContent(m, isOwn, highlightedMessageId, highlightQuery)}
+    </View>
+  );
 
   return (
     <View style={[styles.row, { justifyContent: isOwn ? "flex-end" : "flex-start" }]}>
@@ -269,10 +289,21 @@ const MessageRow = memo(({ m, isOwn, isFirstInGroup, isLastInGroup, highlightedM
       <View style={[styles.messageWrapper, { alignItems: isOwn ? "flex-end" : "flex-start", marginHorizontal: isOwn ? 0 : 8 }]}>
         {!isOwn && isFirstInGroup && <Text style={styles.nameText}>{m.sender.fullName}</Text>}
 
-        <View style={{ maxWidth: "80%" }}>
-          <View style={shouldHaveBg ? (isOwn ? styles.bubbleOwn : styles.bubbleOther) : undefined}>
-            {renderMessageContent(m, isOwn, highlightedMessageId, highlightQuery)}
-          </View>
+        <View style={{ maxWidth: "80%", flexDirection: "row", alignItems: "flex-end" }}>
+          {isActionable ? (
+            <Pressable
+              onLongPress={(e) => {
+                const { pageX, pageY } = e.nativeEvent;
+                // pass a compact layout; openActionMenu will decide which side to show
+                onLongPress(m, { x: pageX - 70, y: pageY - 10, width: 140, height: 0 });
+              }}
+              delayLongPress={300}
+            >
+              {Bubble}
+            </Pressable>
+          ) : (
+            Bubble
+          )}
         </View>
       </View>
     </View>
@@ -300,6 +331,11 @@ export default function ConversationChatScreen() {
   const [isTyping, setIsTyping] = useState(false);
   const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const [highlightQuery, setHighlightQuery] = useState<string>("");
+  const [translatingIds, setTranslatingIds] = useState<string[]>([]);
+  const [actionMenuVisible, setActionMenuVisible] = useState(false);
+  const [actionMenuPosition, setActionMenuPosition] = useState<{ x: number; y: number } | null>(null);
+  const [actionMenuSide, setActionMenuSide] = useState<'left' | 'right'>('right');
+  const [selectedMessageForAction, setSelectedMessageForAction] = useState<MessageResponse | null>(null);
   const stompClientRef = useRef<StompJs.Client | null>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const flatListRef = useRef<FlatList | null>(null);
@@ -310,6 +346,33 @@ export default function ConversationChatScreen() {
   const contextHasMoreOlderRef = useRef<boolean>(true);
   const contextHasMoreNewerRef = useRef<boolean>(true);
   const audioRecorder = useChatAudioRecorder();
+  const [firstLoad, setFirstLoad] = useState(true);
+
+  const getUserLanguage = () => {
+    return (user && (user.languageCode || (user as any).language || (user as any).preferredLanguage)) || null;
+  };
+
+  // Open action menu for a message
+  const openActionMenu = (
+    m: MessageResponse,
+    layout: { x: number; y: number; width: number; height: number }
+  ) => {
+    const isOwn = m.sender.userId === currentUserId;
+    setSelectedMessageForAction(m);
+    setActionMenuPosition({
+      x: layout.x,
+      y: layout.y,
+    });
+    setActionMenuSide(isOwn ? 'left' : 'right');
+    setActionMenuVisible(true);
+  };
+
+  // Close action menu
+  const closeActionMenu = () => {
+    setActionMenuVisible(false);
+    setSelectedMessageForAction(null);
+    setActionMenuPosition(null);
+  };
 
   // Load initial messages or jump to message
   useEffect(() => {
@@ -319,7 +382,6 @@ export default function ConversationChatScreen() {
       setLoading(true);
       try {
         if (jumpMessage) {
-          // Jump to specific message - context mode
           contextModeRef.current = true;
           contextPivotRef.current = jumpMessage.id;
           contextHasMoreOlderRef.current = true;
@@ -336,7 +398,6 @@ export default function ConversationChatScreen() {
             }
           }, 1000);
         } else {
-          // Normal load
           contextModeRef.current = false;
           contextPivotRef.current = null;
           contextHasMoreOlderRef.current = false;
@@ -355,6 +416,9 @@ export default function ConversationChatScreen() {
         console.error("Failed to load messages:", err);
       } finally {
         setLoading(false);
+        setTimeout(() => {
+          setFirstLoad(false);
+        }, 3000);
       }
     };
 
@@ -377,7 +441,6 @@ export default function ConversationChatScreen() {
       client.subscribe(`/topic/conversations/${conversationId}`, (message) => {
         try {
           const newMsg = JSON.parse(message.body) as MessageResponse;
-          // Use mergeAndSortMessages to deduplicate and maintain order (same as ChatView)
           setMessages((prev) => mergeAndSortMessages(prev, [newMsg]));
           setTimeout(() => {
             flatListRef.current?.scrollToEnd({ animated: true });
@@ -392,7 +455,7 @@ export default function ConversationChatScreen() {
         (message) => {
           try {
             const { userId: typingUserId, typing } = JSON.parse(message.body);
-            if (typingUserId === currentUserId) return; // bỏ qua self
+            if (typingUserId === currentUserId) return; // ignore self
 
             setTypingUsers((prev) => ({
               ...prev,
@@ -425,11 +488,13 @@ export default function ConversationChatScreen() {
       }),
     });
   };
+
   const assetToFile = (asset: any) => ({
     uri: asset.uri,
     name: asset.fileName || asset.uri.split("/").pop() || "file",
     type: asset.mimeType || "application/octet-stream",
   }) as any;
+
   const handlePickMedia = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) return;
@@ -453,7 +518,6 @@ export default function ConversationChatScreen() {
         files
       );
 
-      // Không setMessages – WebSocket sẽ tự đẩy về
       setTimeout(() => {
         flatListRef.current?.scrollToEnd({ animated: true });
       }, 1000);
@@ -549,7 +613,6 @@ export default function ConversationChatScreen() {
           type: isLink ? "link" : "text",
         });      
 
-        // Don't add message to state here - let WebSocket handle it to avoid duplicates
         setNewMessage("");
         setIsTyping(false);
         sendTypingEvent(false);
@@ -564,19 +627,67 @@ export default function ConversationChatScreen() {
     }
   };
 
+  // Translation handler (mobile) - follows same behavior as web
+  const handleTranslation = async (m: MessageResponse) => {
+    if (!m) return;
+
+    const lang = getUserLanguage();
+    if (!lang) {
+      Alert.alert(
+        "Language not set",
+        "You need to set your preferred language before translating. Do you want to update your profile now?",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Set now", onPress: () => navigation.navigate('ProfileEdit') },
+        ]
+      );
+      return;
+    }
+
+    // skip if translation already exists
+    const translatedExists = messages.some((msg) => msg.id === `${m.id}-translated`);
+    if (translatedExists) return;
+
+    // mark translating
+    setTranslatingIds((prev) => [...prev, m.id]);
+
+    try {
+      const translated = await translateMessage(m, lang);
+
+      setMessages((prev) => {
+        const index = prev.findIndex((msg) => msg.id === m.id);
+        if (index === -1) return prev;
+
+        const newMessages = [...prev];
+        newMessages.splice(index + 1, 0, translated);
+        return newMessages;
+      });
+
+      // scroll to show translated message
+      setTimeout(() => {
+        const idx = messages.findIndex(msg => msg.id === m.id);
+        if (idx !== -1) flatListRef.current?.scrollToIndex({ index: idx + 1, animated: true, viewPosition: 0.5 });
+      }, 300);
+    } catch (err) {
+      console.error("Translation failed:", err);
+      setErrorMsg("Translation failed");
+      setTimeout(() => setErrorMsg(null), 3000);
+    } finally {
+      setTranslatingIds((prev) => prev.filter((id) => id !== m.id));
+    }
+  };
+
   // Load more and preserve scroll position when prepending older messages
   const loadMorePreserveScroll = async (prevContentHeight: number) => {
     if (loading || !conversationId) return;
     isLoadingRef.current = true;
     try {
       if (contextModeRef.current) {
-        // load older messages relative to current first message
         const firstId = messages[0]?.id;
         if (firstId) {
           const older = await fetchOldMessages(conversationId, firstId, PAGE_SIZE);
           if (older.length > 0) {
             setMessages((prev) => mergeAndSortMessages(prev, older));
-            // after layout update, adjust scroll so user stays at the same message
             setTimeout(() => {
               const newH = contentHeightRef.current || 0;
               const diff = newH - prevContentHeight;
@@ -585,20 +696,18 @@ export default function ConversationChatScreen() {
               }
             }, 1000);
           } else {
-            // no more older messages in context mode
             contextHasMoreOlderRef.current = false;
           }
         } else {
           contextHasMoreOlderRef.current = false;
         }
-      } else if (hasMore) {
+      } else if (hasMore && !firstLoad) {
         const more = await fetchMessages(conversationId, page, PAGE_SIZE);
         if (more.length > 0) {
           setMessages((prev) => mergeAndSortMessages(prev, more));
           setPage((prev) => prev + 1);
           setHasMore(more.length === PAGE_SIZE);
 
-          // after layout update, adjust scroll so user stays at the same message
           setTimeout(() => {
             const newH = contentHeightRef.current || 0;
             const diff = newH - prevContentHeight;
@@ -630,7 +739,6 @@ export default function ConversationChatScreen() {
         if (newer.length > 0) {
           setMessages((prev) => mergeAndSortMessages(prev, newer));
         } else {
-          // no more newer messages in context mode
           contextHasMoreNewerRef.current = false;
         }
       } else {
@@ -646,11 +754,9 @@ export default function ConversationChatScreen() {
   const handleScroll = (event: any) => {
     const { layoutMeasurement, contentOffset, contentSize } = event.nativeEvent;
 
-    // update current content height for later calculations
     contentHeightRef.current = contentSize.height;
 
-    // Check if scrolled to top (to load older messages)
-    const isAtTop = contentOffset.y <= 50; // 50px threshold
+    const isAtTop = contentOffset.y <= 50;
 
     if (isAtTop && !loading && !isLoadingRef.current) {
       if (contextModeRef.current) {
@@ -658,19 +764,17 @@ export default function ConversationChatScreen() {
       } else {
         if (!hasMore) return;
       }
-      // capture previous content height
       const prevHeight = contentSize.height;
       loadMorePreserveScroll(prevHeight);
     }
 
-    // If near bottom and in context mode: load newer messages
     const nearBottom = contentSize.height - contentOffset.y - layoutMeasurement.height < 50;
     if (nearBottom && contextModeRef.current && !loading) {
-      // guard: if we've already determined there are no newer messages, skip
       if (!contextHasMoreNewerRef.current) return;
       loadNewerMessages();
     }
   };
+
   const renderMessageItem = useCallback(({ item: m }: { item: MessageResponse }) => {
     const isOwn = m.sender.userId === currentUserId;
 
@@ -696,8 +800,10 @@ export default function ConversationChatScreen() {
     const isFirstInGroup = !prev || prev.sender.userId !== m.sender.userId;
     const isLastInGroup = !next || next.sender.userId !== m.sender.userId;
 
-    return <MessageRow m={m} isOwn={isOwn} isFirstInGroup={isFirstInGroup} isLastInGroup={isLastInGroup} highlightedMessageId={highlightedMessageId} highlightQuery={highlightQuery} />;
-  }, [messages, currentUserId, highlightedMessageId, highlightQuery]);
+    const isTranslating = translatingIds.includes(m.id);
+
+    return <MessageRow m={m} isOwn={isOwn} isFirstInGroup={isFirstInGroup} isLastInGroup={isLastInGroup} highlightedMessageId={highlightedMessageId} highlightQuery={highlightQuery} onLongPress={openActionMenu} />;
+  }, [messages, currentUserId, highlightedMessageId, highlightQuery, translatingIds]);
 
   // Auto clear error
   useEffect(() => {
@@ -799,6 +905,7 @@ export default function ConversationChatScreen() {
             </Text>
           </View>
         )}
+
         {/* Input Area */}
         <View
           style={{
@@ -877,6 +984,53 @@ export default function ConversationChatScreen() {
             <MaterialIcons name="send" size={18} color="#fff" />
           </TouchableOpacity>
         </View>
+
+        {/* Action menu overlay (long-press) */}
+        {actionMenuVisible && selectedMessageForAction && (
+          <>
+            <TouchableWithoutFeedback onPress={closeActionMenu}>
+              <View style={StyleSheet.absoluteFill} />
+            </TouchableWithoutFeedback>
+            <View
+              style={{
+                position: "absolute",
+                bottom: 66,
+                left: 0,
+                right: 0,
+              }}
+              pointerEvents="box-none"
+            >
+              <View style={{ backgroundColor: "#fff", borderRadius: 8, paddingVertical: 16, paddingHorizontal: 8, elevation: 6, shadowColor: "#000", shadowOpacity: 0.12, shadowRadius: 8, flexDirection: "row" }}>
+                <TouchableOpacity
+                  style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 8, paddingHorizontal: 8 }}
+                  onPress={() => {
+                    // close first so it disappears immediately
+                    const msg = selectedMessageForAction;
+                    closeActionMenu();
+                    if (msg) handleTranslation(msg);
+                  }}
+                >
+                  <MaterialIcons name="translate" size={16} color="#111827" />
+                  <Text style={{ fontSize: 14, color: "#111827", marginLeft: 4 }}>Translate</Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 8, paddingHorizontal: 8 }}
+                  onPress={() => {
+                    const msg = selectedMessageForAction;
+                    closeActionMenu();
+                    if (msg?.content) {
+                      Clipboard.setStringAsync(msg.content);
+                    }
+                  }}
+                >
+                  <MaterialIcons name="content-copy" size={16} color="#111827" />
+                  <Text style={{ fontSize: 14, color: "#111827", marginLeft: 4 }}>Copy</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </>
+        )}
       </View>
     </KeyboardAvoidingView>
   );
