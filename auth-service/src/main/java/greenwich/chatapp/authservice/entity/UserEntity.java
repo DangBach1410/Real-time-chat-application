@@ -39,6 +39,7 @@ public class UserEntity implements UserDetails {
 
     private List<Friend> friends = new ArrayList<>();
     private List<FriendRequest> friendRequests = new ArrayList<>();
+    private boolean banned = false;
 
     @Getter
     @Setter
@@ -67,7 +68,7 @@ public class UserEntity implements UserDetails {
 
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
-        return List.of();
+        return List.of(() -> "ROLE_" + role.name());
     }
 }
 

@@ -127,9 +127,9 @@ export default function ChatLayout() {
         callType={(incomingCall?.type as "audio" | "video") || "audio"}
         conversationId={incomingCall?.conversationId || ""}
         conversationName={incomingCall?.conversationName}
-        onAccept={() => {
+        onAccept={(uid) => {
           if (!incomingCall) return;
-          const url = `/call?channel=${incomingCall.conversationId}&type=${incomingCall.type}&uid=${localStorage.getItem("userId")}`;
+          const url = `/call?channel=${incomingCall.conversationId}&type=${incomingCall.type}&agoraUid=${uid}`;
           window.open(url, "_blank", "width=1000,height=700");
           setIncomingCall(null);
         }}

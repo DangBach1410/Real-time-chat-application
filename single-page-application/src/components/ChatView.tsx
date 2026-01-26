@@ -968,10 +968,10 @@ export default function ChatView({
           };
 
           // yêu cầu server khởi / tham gia cuộc gọi
-          await startOrJoinCall(payload);
+          const res = await startOrJoinCall(payload);
 
           // mở cửa sổ call (giữ cùng format như ChatCrossBar)
-          const url = `/call?channel=${conv.id}&type=${isVideo ? "video" : "audio"}&uid=${userId}`;
+          const url = `/call?channel=${conv.id}&type=${isVideo ? "video" : "audio"}&agoraUid=${res.agoraUid}`;
           window.open(url, "_blank", "width=1000,height=700");
         } catch (err) {
           console.error("❌ Failed to join call:", err);

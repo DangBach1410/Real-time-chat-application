@@ -1,6 +1,5 @@
 package greenwich.chatapp.apigateway.exception;
 
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -12,7 +11,7 @@ public class HandleException extends ResponseEntityExceptionHandler {
 
     @ExceptionHandler(ValidationException.class)
     public ResponseEntity<Object> handleException(ValidationException ex) {
-        AuthenticationResponse authenticationResponse = new AuthenticationResponse(HttpStatus.UNAUTHORIZED.value(), ex.getMessage());
-        return new ResponseEntity<>(authenticationResponse, HttpStatus.UNAUTHORIZED);
+        AuthenticationResponse authenticationResponse = new AuthenticationResponse(ex.getStatus().value(), ex.getMessage());
+        return new ResponseEntity<>(authenticationResponse, ex.getStatus());
     }
 }

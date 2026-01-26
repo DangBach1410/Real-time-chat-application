@@ -48,6 +48,18 @@ public class JwtFilter extends OncePerRequestFilter {
 
             if (userName != null && SecurityContextHolder.getContext().getAuthentication() == null) {
                 UserDetails userDetails = userDetailsService.loadUserByUsername(userName);
+                if (userDetails instanceof greenwich.chatapp.authservice.entity.UserEntity user && user.isBanned()) {
+                        response.setStatus(HttpServletResponse.SC_FORBIDDEN);
+                        response.setContentType("application/json");
+                        response.getWriter().write("""
+                        {
+                          "status": 403,
+                          "message": "User has been banned"
+                        }
+                    """);
+                        return;
+                    }
+
                 if (jwtService.validateToken(token)) {
                     UsernamePasswordAuthenticationToken authToken =
                             new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());

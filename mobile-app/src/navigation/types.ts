@@ -30,4 +30,10 @@ export type MainStackParamList = {
     conversation: any;
     onSelectMessage?: (message: any, query: string) => void;
   };
+  CallScreen: {
+    channel: string;
+    agoraUid: number;
+    type: "audio" | "video";
+    userName: string;
+  };
 };

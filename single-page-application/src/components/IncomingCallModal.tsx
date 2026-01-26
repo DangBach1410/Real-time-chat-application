@@ -11,7 +11,7 @@ interface IncomingCallModalProps {
   callType: "audio" | "video";
   conversationId: string;
   conversationName?: string;
-  onAccept: () => void;
+  onAccept: (uid: number) => void;
   onDecline: () => void;
   onTimeout?: () => void; // callback khi modal tự tắt sau 1 phút
 }
@@ -93,7 +93,7 @@ export default function IncomingCallModal({
                 };
                 const res = await startOrJoinCall(req);
                 console.log(res); // "Call event sent successfully"
-                onAccept(); // gọi callback gốc
+                onAccept(res.agoraUid); // gọi callback gốc
               } catch (error) {
                 console.error("Failed to start/join call:", error);
               }

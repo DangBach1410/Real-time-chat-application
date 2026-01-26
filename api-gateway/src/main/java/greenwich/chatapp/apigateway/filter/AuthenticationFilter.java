@@ -38,9 +38,13 @@ public class AuthenticationFilter implements GatewayFilter {
                     .retrieve()
                     .body(new ParameterizedTypeReference<>() {});
         } catch (HttpClientErrorException e) {
-            if (e.getStatusCode() == HttpStatus.UNAUTHORIZED) {
-                log.error("Auth service rejected token: {}", e.getResponseBodyAsString());
-                throw new ValidationException(HttpStatus.UNAUTHORIZED, "Invalid token");
+            if (e.getStatusCode() == HttpStatus.UNAUTHORIZED ||
+                    e.getStatusCode() == HttpStatus.FORBIDDEN) {
+
+                throw new ValidationException(
+                        (HttpStatus) e.getStatusCode(),
+                        e.getResponseBodyAsString()
+                );
             }
             throw e;
         }

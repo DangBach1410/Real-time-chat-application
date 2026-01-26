@@ -1,5 +1,10 @@
-// screens/ConversationDetailsScreen.tsx
-import React, { useEffect, useMemo, useState, useCallback, useRef } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useState,
+  useCallback,
+  useRef,
+} from "react";
 import {
   View,
   Text,
@@ -8,8 +13,14 @@ import {
   FlatList,
   StyleSheet,
   Alert,
+  TextInput,
 } from "react-native";
-import { RouteProp, useNavigation, useRoute, useFocusEffect } from "@react-navigation/native";
+import {
+  RouteProp,
+  useNavigation,
+  useRoute,
+  useFocusEffect,
+} from "@react-navigation/native";
 import { MaterialIcons } from "@expo/vector-icons";
 import {
   ConversationResponse,
@@ -21,6 +32,7 @@ import {
   fetchConversationFiles,
   fetchConversationLinks,
   updateConversationImage,
+  updateConversationName,
 } from "../api/chatApi";
 import { DEFAULT_AVATAR } from "../constants/common";
 import { normalizeImageUrl } from "../utils/image";
@@ -29,6 +41,8 @@ import { useWindowDimensions } from "react-native";
 import { useVideoPlayer, VideoView } from "expo-video";
 import { Linking } from "react-native";
 import * as ImagePicker from "expo-image-picker";
+import { ScrollView } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 type RouteParams = {
   ConversationDetails: {
@@ -48,7 +62,10 @@ function SectionHeader({
   return (
     <TouchableOpacity onPress={onPress} style={styles.sectionHeader}>
       <Text style={styles.sectionTitle}>{title}</Text>
-      <MaterialIcons name={open ? "keyboard-arrow-up" : "keyboard-arrow-down"} size={20} />
+      <MaterialIcons
+        name={open ? "keyboard-arrow-up" : "keyboard-arrow-down"}
+        size={20}
+      />
     </TouchableOpacity>
   );
 }
@@ -60,7 +77,10 @@ function MediaItem({ item }: { item: MessageResponse }) {
 
   if (meta.mediaType === "image") {
     return (
-      <Image source={{ uri: normalizeImageUrl(meta.url) }} style={{ width: size, height: size }} />
+      <Image
+        source={{ uri: normalizeImageUrl(meta.url) }}
+        style={{ width: size, height: size }}
+      />
     );
   }
 
@@ -71,7 +91,12 @@ function MediaItem({ item }: { item: MessageResponse }) {
 
     return (
       <View style={{ width: size, height: size, backgroundColor: "#000" }}>
-        <VideoView style={{ width: "100%", height: "100%" }} player={player} contentFit="cover" allowsPictureInPicture />
+        <VideoView
+          style={{ width: "100%", height: "100%" }}
+          player={player}
+          contentFit="cover"
+          allowsPictureInPicture
+        />
       </View>
     );
   }
@@ -106,27 +131,44 @@ export default function ConversationDetailsScreen() {
   const route = useRoute<RouteProp<RouteParams, "ConversationDetails">>();
 
   const { conversation } = route.params;
-  const [conversationState, setConversation] = useState<ConversationResponse>(conversation);
+  // local mutable copy so we can update name/image locally
+  const [conversationState, setConversation] =
+    useState<ConversationResponse>(conversation);
 
   const { user, currentUserId, usersPresence } = useChatContext();
   const isPrivate = conversation.type === "private";
 
-  const otherUser = isPrivate ? conversation.members.find((m) => m.userId !== currentUserId) : null;
+  const otherUser = isPrivate
+    ? conversation.members.find((m) => m.userId !== currentUserId)
+    : null;
 
-  const displayName = isPrivate ? otherUser?.fullName : conversation.name || "Unnamed group";
-
-  const isAdmin = conversation.members?.find((u) => u.userId === currentUserId)?.role === "admin";
+  // prefer members list (fetched) for admin check, fallback to original conversation prop
+  const isAdmin =
+    (members.find((u) => u.userId === currentUserId)?.role === "admin") ||
+    (conversation.members?.find((u) => u.userId === currentUserId)?.role ===
+      "admin");
 
   useFocusEffect(
     useCallback(() => {
       fetchConversationMembers(conversation.id)
         .then(setMembers)
         .catch(console.error);
-    }, [conversation.id])
+    }, [conversation.id]),
   );
 
+  // Editing group name states
+  const [isEditingName, setIsEditingName] = useState(false);
+  const [newName, setNewName] = useState(conversationState.name || "");
+
+  // sync local newName when conversationState.name changes (e.g., after update)
+  useEffect(() => {
+    setNewName(conversationState.name || "");
+  }, [conversationState.name]);
+
   // rest of your code (toggleSection, loadMore handlers, update image, remove member, leave group) largely unchanged
-  const toggleSection = async (type: "members" | "media" | "files" | "links") => {
+  const toggleSection = async (
+    type: "members" | "media" | "files" | "links",
+  ) => {
     setSectionsOpen((prev) => ({ ...prev, [type]: !prev[type] }));
 
     if (type === "media" && media.length === 0 && mediaHasMore) {
@@ -153,7 +195,11 @@ export default function ConversationDetailsScreen() {
 
   const loadMoreMedia = async () => {
     if (!mediaHasMore) return;
-    const res = await fetchConversationMedia(conversation.id, mediaPage.current, PAGE_SIZE);
+    const res = await fetchConversationMedia(
+      conversation.id,
+      mediaPage.current,
+      PAGE_SIZE,
+    );
     setMedia((prev) => [...prev, ...res]);
     mediaPage.current += 1;
     setMediaHasMore(res.length === PAGE_SIZE);
@@ -161,7 +207,11 @@ export default function ConversationDetailsScreen() {
 
   const loadMoreFiles = async () => {
     if (!filesHasMore) return;
-    const res = await fetchConversationFiles(conversation.id, filesPage.current, PAGE_SIZE);
+    const res = await fetchConversationFiles(
+      conversation.id,
+      filesPage.current,
+      PAGE_SIZE,
+    );
     setFiles((prev) => [...prev, ...res]);
     filesPage.current += 1;
     setFilesHasMore(res.length === PAGE_SIZE);
@@ -169,7 +219,11 @@ export default function ConversationDetailsScreen() {
 
   const loadMoreLinks = async () => {
     if (!linksHasMore) return;
-    const res = await fetchConversationLinks(conversation.id, linksPage.current, PAGE_SIZE);
+    const res = await fetchConversationLinks(
+      conversation.id,
+      linksPage.current,
+      PAGE_SIZE,
+    );
     setLinks((prev) => [...prev, ...res]);
     linksPage.current += 1;
     setLinksHasMore(res.length === PAGE_SIZE);
@@ -209,7 +263,12 @@ export default function ConversationDetailsScreen() {
         type: asset.mimeType ?? "image/jpeg",
       } as any;
 
-      const updated = await updateConversationImage(conversation.id, currentUserId, user?.fullName ?? "Unknown", file);
+      const updated = await updateConversationImage(
+        conversation.id,
+        currentUserId,
+        user?.fullName ?? "Unknown",
+        file,
+      );
       setConversation(updated);
     } catch (err) {
       console.error("Update group image failed", err);
@@ -254,147 +313,304 @@ export default function ConversationDetailsScreen() {
     ]);
   };
 
-  // UI 
-  return (
-    <View style={styles.container}>
-      {/* header */}
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <MaterialIcons name="arrow-back" size={24} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Details</Text>
-        <View style={{ width: 24 }} />
-      </View>
+  // Save group name
+  const handleSaveName = async () => {
+    const trimmed = newName.trim();
+    if (!trimmed) {
+      Alert.alert("Invalid name", "Group name cannot be empty.");
+      return;
+    }
 
-      <View style={styles.topSection}>
-        <View style={{ position: "relative" }}>
-          {/* avatar rendering logic same as before */}
-          {isPrivate ? (
-            <Image source={{ uri: normalizeImageUrl(otherUser?.imageUrl || DEFAULT_AVATAR) }} style={styles.avatarLarge} />
-          ) : conversation.imageUrl ? (
-            <Image source={{ uri: normalizeImageUrl(conversation.imageUrl) }} style={styles.avatarLarge} />
-          ) : (
-            <View style={styles.groupAvatarLarge}>
-              {conversation.members.slice(-2).map((m, idx) => (
+    if (trimmed === conversationState.name) {
+      setIsEditingName(false);
+      setNewName(conversationState.name || "");
+      return;
+    }
+
+    try {
+      const updated = await updateConversationName(
+        conversation.id,
+        currentUserId,
+        user?.fullName ?? "Unknown",
+        trimmed,
+      );
+      setConversation(updated);
+      setIsEditingName(false);
+    } catch (err) {
+      console.error("Failed to update conversation name", err);
+      Alert.alert("Error", "Failed to update group name");
+    }
+  };
+
+  // UI
+  return (
+    <SafeAreaView
+      style={{
+        flex: 1,
+        backgroundColor: "#000000",
+      }}
+    >
+      <View style={styles.container}>
+        {/* header */}
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => navigation.goBack()}>
+            <MaterialIcons name="arrow-back" size={24} />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Details</Text>
+          <View style={{ width: 24 }} />
+        </View>
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={{ paddingBottom: 24 }}
+          showsVerticalScrollIndicator={false}
+        >
+          <View style={styles.topSection}>
+            <View style={{ position: "relative" }}>
+              {/* avatar rendering logic same as before */}
+              {isPrivate ? (
                 <Image
-                  key={m.userId}
-                  source={{ uri: normalizeImageUrl(m.imageUrl || DEFAULT_AVATAR) }}
-                  style={[styles.groupAvatarItemLarge, idx === 0 ? styles.avatarTop : styles.avatarBottom]}
+                  source={{
+                    uri: normalizeImageUrl(
+                      otherUser?.imageUrl || DEFAULT_AVATAR,
+                    ),
+                  }}
+                  style={styles.avatarLarge}
                 />
+              ) : conversationState.imageUrl ? (
+                <Image
+                  source={{ uri: normalizeImageUrl(conversationState.imageUrl) }}
+                  style={styles.avatarLarge}
+                />
+              ) : (
+                <View style={styles.groupAvatarLarge}>
+                  {conversation.members.slice(-2).map((m, idx) => (
+                    <Image
+                      key={m.userId}
+                      source={{
+                        uri: normalizeImageUrl(m.imageUrl || DEFAULT_AVATAR),
+                      }}
+                      style={[
+                        styles.groupAvatarItemLarge,
+                        idx === 0 ? styles.avatarTop : styles.avatarBottom,
+                      ]}
+                    />
+                  ))}
+                </View>
+              )}
+
+              {!isPrivate && (
+                <TouchableOpacity
+                  style={styles.cameraBtn}
+                  onPress={handleUpdateGroupImage}
+                >
+                  <MaterialIcons name="photo-camera" size={18} color="#111" />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {/* Name / editing */}
+            {!isPrivate && isEditingName ? (
+              <View style={{ flexDirection: "row", alignItems: "center", marginTop: 12 }}>
+                <TextInput
+                  value={newName}
+                  onChangeText={setNewName}
+                  onSubmitEditing={handleSaveName}
+                  style={styles.nameInput}
+                  placeholder="Group name"
+                  returnKeyType="done"
+                  autoFocus
+                />
+                <TouchableOpacity onPress={handleSaveName} style={{ marginLeft: 8 }}>
+                  <MaterialIcons name="check" size={22} color="#16a34a" />
+                </TouchableOpacity>
+                <TouchableOpacity
+                  onPress={() => {
+                    setNewName(conversationState.name || "");
+                    setIsEditingName(false);
+                  }}
+                  style={{ marginLeft: 8 }}
+                >
+                  <MaterialIcons name="close" size={22} color="#6b7280" />
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <Text style={styles.name}>{isPrivate ? otherUser?.fullName : (conversationState.name || "Unnamed group")}</Text>
+                {!isPrivate && isAdmin && (
+                  <TouchableOpacity
+                    style={{ marginLeft: 8, marginTop: 12 }}
+                    onPress={() => setIsEditingName(true)}
+                  >
+                    <MaterialIcons name="edit" size={18} color="#6b7280" />
+                  </TouchableOpacity>
+                )}
+              </View>
+            )}
+
+            {!isPrivate && (
+              <Text style={styles.sub}>{members.length} members</Text>
+            )}
+          </View>
+
+          <View style={styles.actionRow}>
+            {!isPrivate && (
+              <TouchableOpacity
+                style={styles.actionBtn}
+                onPress={() =>
+                  navigation.navigate("AddMember", {
+                    conversationId: conversation.id,
+                    existingMemberIds: members.map((m) => m.userId),
+                  })
+                }
+              >
+                <MaterialIcons name="person-add" size={18} />
+                <Text style={styles.actionText}>Add member</Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={styles.actionBtn}
+              onPress={() =>
+                navigation.navigate("ConversationSearch", {
+                  conversation,
+                  onSelectMessage: (message: any, query: string) => {
+                    navigation.navigate("ConversationChat", {
+                      conversation,
+                      usersPresence,
+                      jumpMessage: message,
+                      jumpQuery: query,
+                    });
+                  },
+                })
+              }
+            >
+              <MaterialIcons name="search" size={18} />
+              <Text style={styles.actionText}>Search</Text>
+            </TouchableOpacity>
+          </View>
+
+          <SectionHeader
+            title={`Members (${members.length})`}
+            open={sectionsOpen.members}
+            onPress={() => toggleSection("members")}
+          />
+
+          {sectionsOpen.members && (
+            <View>
+              {members.map((m) => (
+                <View key={m.userId} style={styles.memberRow}>
+                  <Image
+                    source={{
+                      uri: normalizeImageUrl(m.imageUrl || DEFAULT_AVATAR),
+                    }}
+                    style={styles.memberAvatar}
+                  />
+                  <Text style={styles.memberName}>{m.fullName}</Text>
+                  {isAdmin && m.userId !== currentUserId && (
+                    <TouchableOpacity
+                      onPress={() => handleRemoveMember(m.userId)}
+                      style={styles.removeBtn}
+                      hitSlop={8}
+                    >
+                      <MaterialIcons name="close" size={20} color="#ef4444" />
+                    </TouchableOpacity>
+                  )}
+                </View>
               ))}
             </View>
           )}
 
+          <SectionHeader
+            title="Media"
+            open={sectionsOpen.media}
+            onPress={() => toggleSection("media")}
+          />
+          {sectionsOpen.media && (
+            <FlatList
+              data={media}
+              numColumns={3}
+              keyExtractor={(i) => i.id}
+              onEndReached={loadMoreMedia}
+              onEndReachedThreshold={0.5}
+              renderItem={({ item }) => <MediaItem item={item} />}
+            />
+          )}
+
+          <SectionHeader
+            title="Files"
+            open={sectionsOpen.files}
+            onPress={() => toggleSection("files")}
+          />
+          {sectionsOpen.files && (
+            <FlatList
+              data={files}
+              keyExtractor={(i) => i.id}
+              onEndReached={loadMoreFiles}
+              renderItem={({ item }) => {
+                const meta = JSON.parse(item.content);
+                return (
+                  <TouchableOpacity style={styles.fileRow}>
+                    <MaterialIcons name="insert-drive-file" size={22} />
+                    <Text numberOfLines={1} style={{ marginLeft: 8 }}>
+                      {meta.originalName}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              }}
+            />
+          )}
+
+          <SectionHeader
+            title="Links"
+            open={sectionsOpen.links}
+            onPress={() => toggleSection("links")}
+          />
+          {sectionsOpen.links && (
+            <FlatList
+              data={links}
+              keyExtractor={(i) => i.id}
+              onEndReached={loadMoreLinks}
+              renderItem={({ item }) => {
+                const meta = JSON.parse(item.content);
+                return (
+                  <TouchableOpacity
+                    style={styles.linkRow}
+                    activeOpacity={0.7}
+                    onPress={() => openLink(meta.url)}
+                  >
+                    {meta.image && (
+                      <Image
+                        source={{ uri: normalizeImageUrl(meta.image) }}
+                        style={styles.linkThumb}
+                      />
+                    )}
+                    <View style={{ flex: 1 }}>
+                      <Text numberOfLines={1} style={styles.linkTitle}>
+                        {meta.title || meta.url}
+                      </Text>
+                      <Text numberOfLines={1} style={styles.linkUrl}>
+                        {meta.url}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              }}
+            />
+          )}
+
           {!isPrivate && (
-            <TouchableOpacity style={styles.cameraBtn} onPress={handleUpdateGroupImage}>
-              <MaterialIcons name="photo-camera" size={18} color="#111" />
+            <TouchableOpacity
+              style={styles.leaveBtn}
+              activeOpacity={0.7}
+              onPress={handleLeaveGroup}
+            >
+              <MaterialIcons name="logout" size={20} color="#dc2626" />
+              <Text style={styles.leaveText}>Leave Group</Text>
             </TouchableOpacity>
           )}
-        </View>
-
-        <Text style={styles.name}>{displayName}</Text>
-        {!isPrivate && <Text style={styles.sub}>{conversation.members.length} members</Text>}
+        </ScrollView>
       </View>
-
-      <View style={styles.actionRow}>
-        {!isPrivate && (
-          <TouchableOpacity
-            style={styles.actionBtn}
-            onPress={() => navigation.navigate("AddMember", {
-            conversationId: conversation.id,
-            existingMemberIds: members.map(m => m.userId),
-          })}
-          >
-            <MaterialIcons name="person-add" size={18} />
-            <Text style={styles.actionText}>Add member</Text>
-          </TouchableOpacity>
-        )}
-
-        <TouchableOpacity
-          style={styles.actionBtn}
-          onPress={() =>
-            navigation.navigate("ConversationSearch", {
-              conversation,
-              onSelectMessage: (message: any, query: string) => {
-                navigation.navigate("ConversationChat", {
-                  conversation,
-                  usersPresence,
-                  jumpMessage: message,
-                  jumpQuery: query,
-                });
-              },
-            })
-          }
-        >
-          <MaterialIcons name="search" size={18} />
-          <Text style={styles.actionText}>Search</Text>
-        </TouchableOpacity>
-      </View>
-
-      <SectionHeader title={`Members (${members.length})`} open={sectionsOpen.members} onPress={() => toggleSection("members")} />
-
-      {sectionsOpen.members && (
-        <View>
-          {members.map((m) => (
-            <View key={m.userId} style={styles.memberRow}>
-              <Image source={{ uri: normalizeImageUrl(m.imageUrl || DEFAULT_AVATAR) }} style={styles.memberAvatar} />
-              <Text style={styles.memberName}>{m.fullName}</Text>
-              {isAdmin && m.userId !== currentUserId && (
-                <TouchableOpacity onPress={() => handleRemoveMember(m.userId)} style={styles.removeBtn} hitSlop={8}>
-                  <MaterialIcons name="close" size={20} color="#ef4444" />
-                </TouchableOpacity>
-              )}
-            </View>
-          ))}
-        </View>
-      )}
-
-      <SectionHeader title="Media" open={sectionsOpen.media} onPress={() => toggleSection("media")} />
-      {sectionsOpen.media && (
-        <FlatList data={media} numColumns={3} keyExtractor={(i) => i.id} onEndReached={loadMoreMedia} onEndReachedThreshold={0.5} renderItem={({ item }) => <MediaItem item={item} />} />
-      )}
-
-      <SectionHeader title="Files" open={sectionsOpen.files} onPress={() => toggleSection("files")} />
-      {sectionsOpen.files && (
-        <FlatList
-          data={files}
-          keyExtractor={(i) => i.id}
-          onEndReached={loadMoreFiles}
-          renderItem={({ item }) => {
-            const meta = JSON.parse(item.content);
-            return (
-              <TouchableOpacity style={styles.fileRow}>
-                <MaterialIcons name="insert-drive-file" size={22} />
-                <Text numberOfLines={1} style={{ marginLeft: 8 }}>
-                  {meta.originalName}
-                </Text>
-              </TouchableOpacity>
-            );
-          }}
-        />
-      )}
-
-      <SectionHeader title="Links" open={sectionsOpen.links} onPress={() => toggleSection("links")} />
-      {sectionsOpen.links && <FlatList data={links} keyExtractor={(i) => i.id} onEndReached={loadMoreLinks} renderItem={({ item }) => {
-        const meta = JSON.parse(item.content);
-        return (
-          <TouchableOpacity style={styles.linkRow} activeOpacity={0.7} onPress={() => openLink(meta.url)}>
-            {meta.image && <Image source={{ uri: normalizeImageUrl(meta.image) }} style={styles.linkThumb} />}
-            <View style={{ flex: 1 }}>
-              <Text numberOfLines={1} style={styles.linkTitle}>{meta.title || meta.url}</Text>
-              <Text numberOfLines={1} style={styles.linkUrl}>{meta.url}</Text>
-            </View>
-          </TouchableOpacity>
-        );
-      }} />}
-
-      {!isPrivate && (
-        <TouchableOpacity style={styles.leaveBtn} activeOpacity={0.7} onPress={handleLeaveGroup}>
-          <MaterialIcons name="logout" size={20} color="#dc2626" />
-          <Text style={styles.leaveText}>Leave Group</Text>
-        </TouchableOpacity>
-      )}
-    </View>
+    </SafeAreaView>
   );
 }
 
@@ -456,6 +672,16 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontSize: 18,
     fontWeight: "600",
+  },
+
+  nameInput: {
+    marginTop: 12,
+    borderWidth: 1,
+    borderColor: "#e5e7eb",
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    minWidth: 180,
   },
 
   sub: {

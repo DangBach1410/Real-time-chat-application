@@ -375,8 +375,6 @@ export default function HomeTab() {
           gap: 12,
           paddingHorizontal: 16,
           paddingVertical: 12,
-          borderBottomWidth: 1,
-          borderBottomColor: "#f0f0f0",
           alignItems: "center",
           backgroundColor: isSelected ? "#d1d5db" : "#fff",
         }}

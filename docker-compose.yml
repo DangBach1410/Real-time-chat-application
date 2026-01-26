@@ -165,6 +165,21 @@ services:
     networks:
       - chatapp-network
 
+  admin-service:
+    build:
+      context: ./admin-service
+      dockerfile: Dockerfile
+    container_name: admin-service
+    ports:
+      - "${ADMIN_SERVICE_PORT}:8087"
+    environment:
+      SPRING_DATA_MONGODB_URI: mongodb://mongodb:27017/${MONGO_DB_NAME}
+    depends_on:
+      - service-registry
+    restart: unless-stopped
+    networks:
+      - chatapp-network
+
 networks:
   chatapp-network:
     driver: bridge

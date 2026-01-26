@@ -30,6 +30,44 @@ public class AuthenticationService {
         String username = loginRequest.getUsername();
         String password = loginRequest.getPassword();
 
+        UserEntity userEntity = userRepository.findByUsername(username)
+                .orElse(null);
+
+        if (userEntity == null) {
+            return LoginResponse.builder()
+                    .status(HttpStatus.NOT_FOUND.value())
+                    .message("User not found")
+                    .build();
+        }
+
+        if (userEntity.isBanned()) {
+            return LoginResponse.builder()
+                    .status(HttpStatus.FORBIDDEN.value())
+                    .message("Your account has been banned")
+                    .build();
+        }
+
+        UsernamePasswordAuthenticationToken authenticationToken =
+                new UsernamePasswordAuthenticationToken(username, password);
+
+        authenticationManager.authenticate(authenticationToken);
+
+        String accessToken = jwtService.generateAccessToken(userEntity);
+        String refreshToken = jwtService.generateRefreshToken(userEntity);
+
+        return LoginResponse.builder()
+                .status(HttpStatus.OK.value())
+                .message("Login successful")
+                .userId(userEntity.getId())
+                .accessToken(accessToken)
+                .refreshToken(refreshToken)
+                .build();
+    }
+
+    public LoginResponse loginAdmin(LoginRequest request) {
+        String username = request.getUsername();
+        String password = request.getPassword();
+
         Optional<UserEntity> userEntityByUsername = userRepository.findByUsername(username);
         if (userEntityByUsername.isEmpty()) {
             return LoginResponse.builder()
@@ -40,14 +78,18 @@ public class AuthenticationService {
 
         UsernamePasswordAuthenticationToken usernamePasswordAuthenticationToken = new UsernamePasswordAuthenticationToken(username, password);
         authenticationManager.authenticate(usernamePasswordAuthenticationToken);
-
         UserEntity userEntity = userEntityByUsername.get();
+        if (!userEntity.getRole().name().equals("ADMIN")) {
+            return LoginResponse.builder()
+                    .status(HttpStatus.FORBIDDEN.value())
+                    .message("Access denied: Not an admin user")
+                    .build();
+        }
         String accessToken = jwtService.generateAccessToken(userEntity);
         String refreshToken = jwtService.generateRefreshToken(userEntity);
-
         return LoginResponse.builder()
                 .status(HttpStatus.OK.value())
-                .message("Login successful")
+                .message("Admin login successful")
                 .userId(userEntity.getId())
                 .accessToken(accessToken)
                 .refreshToken(refreshToken)
@@ -118,6 +160,14 @@ public class AuthenticationService {
             return VerifyTokenResponse.builder()
                     .status(HttpStatus.UNAUTHORIZED.value())
                     .message("Token revoked")
+                    .build();
+        }
+
+        UserEntity user = userFoundByUsername.get();
+        if (user.isBanned()) {
+            return VerifyTokenResponse.builder()
+                    .status(HttpStatus.FORBIDDEN.value())
+                    .message("User has been banned")
                     .build();
         }
 

@@ -10,6 +10,7 @@ import NewGroupScreen from '../screens/NewGroupScreen';
 import ConversationDetailsScreen from '../screens/ConversationDetailsScreen';
 import AddMemberScreen from '../screens/AddMemberScreen';
 import ConversationSearchScreen from '../screens/ConversationSearchScreen';
+import CallScreen from '../screens/CallScreen';
 
 const Stack = createNativeStackNavigator<MainStackParamList>();
 
@@ -29,6 +30,7 @@ export default function MainStack() {
       <Stack.Screen name="ConversationDetails" component={ConversationDetailsScreen} />
       <Stack.Screen name="AddMember" component={AddMemberScreen} />
       <Stack.Screen name="ConversationSearch" component={ConversationSearchScreen} />
+      <Stack.Screen name="CallScreen" component={CallScreen} />
     </Stack.Navigator>
   );
 }

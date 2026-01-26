@@ -62,9 +62,7 @@ public class SecurityConfig {
                         )
                         .successHandler(oAuth2AuthenticationSuccessHandler)
                         .failureHandler(oAuth2AuthenticationFailureHandler)
-                )
-                .securityMatcher(WHITE_LIST_URL);
-
+                );
         return http.build();
     }
 }

@@ -45,6 +45,7 @@ import * as ImagePicker from "expo-image-picker";
 import { createMediaMessages } from "../api/chatApi";
 import { useChatAudioRecorder } from "../hooks/useAudioRecorder";
 import * as Clipboard from "expo-clipboard";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 const PAGE_SIZE = 20;
 const LINK_CARD_WIDTH = 300;
@@ -62,15 +63,56 @@ const styles = StyleSheet.create({
   row: { flexDirection: "row", marginVertical: 2, paddingHorizontal: 12 },
   avatarWrapper: { width: 32, justifyContent: "flex-end" },
   avatar: { width: 32, height: 32, borderRadius: 16 },
-  bubbleOwn: { backgroundColor: "#3b82f6", borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8 },
-  bubbleOther: { backgroundColor: "#f3f4f6", borderRadius: 12, paddingHorizontal: 12, paddingVertical: 8 },
+  bubbleOwn: {
+    backgroundColor: "#3b82f6",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  bubbleOther: {
+    backgroundColor: "#f3f4f6",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
   messageWrapper: { flex: 1, marginHorizontal: 8 },
   nameText: { fontSize: 12, color: "#6b7280", marginBottom: 4 },
   image: { width: 320, height: 320, borderRadius: 8 },
-  videoBox: { width: 200, height: 200, backgroundColor: "#000", borderRadius: 8, justifyContent: "center", alignItems: "center", overflow: "hidden" },
-  mediaRow: { flexDirection: "row", gap: 8, paddingHorizontal: 12, paddingVertical: 8 },
-  actionMenuContainer: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, justifyContent: "center", alignItems: "center" },
-  actionMenuBox: { minWidth: 140, backgroundColor: "#fff", borderRadius: 8, paddingVertical: 8, paddingHorizontal: 12, elevation: 6, shadowColor: "#000", shadowOpacity: 0.12, shadowRadius: 8 },
+  videoBox: {
+    width: 200,
+    height: 200,
+    backgroundColor: "#000",
+    borderRadius: 8,
+    justifyContent: "center",
+    alignItems: "center",
+    overflow: "hidden",
+  },
+  mediaRow: {
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  actionMenuContainer: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  actionMenuBox: {
+    minWidth: 140,
+    backgroundColor: "#fff",
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    elevation: 6,
+    shadowColor: "#000",
+    shadowOpacity: 0.12,
+    shadowRadius: 8,
+  },
   actionMenuItem: { paddingVertical: 10 },
   actionMenuText: { fontSize: 16, color: "#111827" },
 });
@@ -78,54 +120,101 @@ const styles = StyleSheet.create({
 // Helper: merge two message arrays, remove duplicates, sort ascending by createdAt
 const mergeAndSortMessages = (
   existing: MessageResponse[],
-  incoming: MessageResponse[]
+  incoming: MessageResponse[],
 ) => {
   const map = new Map<string, MessageResponse>();
   existing.concat(incoming).forEach((m) => map.set(m.id, m));
   const arr = Array.from(map.values());
-  arr.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  arr.sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+  );
   return arr;
 };
 
 // Helper to render highlighted text
 const renderHighlightedText = (text: string, query: string, isOwn: boolean) => {
-  if (!query) return <Text style={{ color: isOwn ? "#fff" : "#000", fontSize: 14 }}>{text}</Text>;
+  if (!query)
+    return (
+      <Text style={{ color: isOwn ? "#fff" : "#000", fontSize: 14 }}>
+        {text}
+      </Text>
+    );
 
-  const regex = new RegExp(`(${query})`, 'gi');
+  const regex = new RegExp(`(${query})`, "gi");
   const parts = text.split(regex);
 
   return (
     <Text style={{ color: isOwn ? "#fff" : "#000", fontSize: 14 }}>
       {parts.map((part, index) =>
         regex.test(part) ? (
-          <Text key={index} style={{ backgroundColor: 'yellow' }}>{part}</Text>
+          <Text key={index} style={{ backgroundColor: "yellow" }}>
+            {part}
+          </Text>
         ) : (
           part
-        )
+        ),
       )}
     </Text>
   );
 };
 
 // Top-level renderer for message content to keep MessageRow small and memo-friendly
-const renderMessageContent = (m: MessageResponse, isOwn: boolean, highlightedMessageId: string | null, highlightQuery: string) => {
+const renderMessageContent = (
+  m: MessageResponse,
+  isOwn: boolean,
+  highlightedMessageId: string | null,
+  highlightQuery: string,
+) => {
   switch (m.type) {
     case "text":
-      return renderHighlightedText(m.content, m.id === highlightedMessageId ? highlightQuery : "", isOwn);
+      return renderHighlightedText(
+        m.content,
+        m.id === highlightedMessageId ? highlightQuery : "",
+        isOwn,
+      );
 
     case "text-translation":
       return (
         <View style={{ flexDirection: "column" }}>
-          <Text style={{ color: isOwn ? "#fff" : "#000", fontSize: 14 }}>{m.content}</Text>
-          <Text style={{ fontSize: 11, fontStyle: "italic", marginTop: 4, alignSelf: "flex-end", color: isOwn ? "#ddd" : "#6b7280" }}>Google Translate</Text>
+          <Text style={{ color: isOwn ? "#fff" : "#000", fontSize: 14 }}>
+            {m.content}
+          </Text>
+          <Text
+            style={{
+              fontSize: 11,
+              fontStyle: "italic",
+              marginTop: 4,
+              alignSelf: "flex-end",
+              color: isOwn ? "#ddd" : "#6b7280",
+            }}
+          >
+            Google Translate
+          </Text>
         </View>
       );
 
     case "notification":
       return (
-        <View style={{ flexDirection: "row", justifyContent: "center", marginVertical: 8 }}>
-          <View style={{ backgroundColor: "#e5e7eb", paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20 }}>
-            <Text style={{ fontSize: 12, color: "#374151" }}>{isOwn ? `You ${m.content}` : `${m.sender?.fullName ?? ""} ${m.content}`}</Text>
+        <View
+          style={{
+            flexDirection: "row",
+            justifyContent: "center",
+            marginVertical: 1,
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: "#e5e7eb",
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+              borderRadius: 20,
+            }}
+          >
+            <Text style={{ fontSize: 12, color: "#374151" }}>
+              {isOwn
+                ? `You ${m.content}`
+                : `${m.sender?.fullName ?? ""} ${m.content}`}
+            </Text>
           </View>
         </View>
       );
@@ -134,12 +223,36 @@ const renderMessageContent = (m: MessageResponse, isOwn: boolean, highlightedMes
     case "audio_call": {
       const isVideo = m.type === "video_call";
       return (
-        <TouchableOpacity style={{ flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, paddingHorizontal: 16, paddingVertical: 12, borderRadius: 12, backgroundColor: isVideo ? "#a855f7" : "#6366f1" }} onPress={() => console.log(`${isVideo ? "Video" : "Audio"} call clicked - implement later`)}>
+        <TouchableOpacity
+          style={{
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 8,
+            paddingHorizontal: 16,
+            paddingVertical: 12,
+            borderRadius: 12,
+            backgroundColor: isVideo ? "#a855f7" : "#6366f1",
+          }}
+          onPress={() =>
+            console.log(
+              `${isVideo ? "Video" : "Audio"} call clicked - implement later`,
+            )
+          }
+        >
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
-            <MaterialIcons name={isVideo ? "videocam" : "call"} size={20} color="#fff" />
-            <Text style={{ fontWeight: "600", fontSize: 14, color: "#fff" }}>{isVideo ? "Video call" : "Audio call"}</Text>
+            <MaterialIcons
+              name={isVideo ? "videocam" : "call"}
+              size={20}
+              color="#fff"
+            />
+            <Text style={{ fontWeight: "600", fontSize: 14, color: "#fff" }}>
+              {isVideo ? "Video call" : "Audio call"}
+            </Text>
           </View>
-          <Text style={{ fontSize: 12, color: "#fff", opacity: 0.9 }}>Click to join call</Text>
+          <Text style={{ fontSize: 12, color: "#fff", opacity: 0.9 }}>
+            Click to join call
+          </Text>
         </TouchableOpacity>
       );
     }
@@ -165,7 +278,9 @@ const renderMessageContent = (m: MessageResponse, isOwn: boolean, highlightedMes
           return <FileMessage url={url} name={originalName} isOwn={isOwn} />;
         }
       } catch {
-        return <Text style={{ color: "#dc2626", fontSize: 12 }}>Invalid media</Text>;
+        return (
+          <Text style={{ color: "#dc2626", fontSize: 12 }}>Invalid media</Text>
+        );
       }
 
     case "link":
@@ -189,7 +304,11 @@ const renderMessageContent = (m: MessageResponse, isOwn: boolean, highlightedMes
       }
 
     default:
-      return <Text style={{ color: isOwn ? "#fff" : "#000", fontSize: 14 }}>{m.content}</Text>;
+      return (
+        <Text style={{ color: isOwn ? "#fff" : "#000", fontSize: 14 }}>
+          {m.content}
+        </Text>
+      );
   }
 };
 
@@ -215,25 +334,47 @@ function LinkPreview({ meta, isOwn }: { meta: any; isOwn: boolean }) {
         <>
           <Image
             source={{ uri: imageUri }}
-            style={{ width: LINK_CARD_WIDTH, aspectRatio: 16 / 9, resizeMode: "cover" }}
+            style={{
+              width: LINK_CARD_WIDTH,
+              aspectRatio: 16 / 9,
+              resizeMode: "cover",
+            }}
           />
         </>
       ) : null}
 
       <View style={{ paddingHorizontal: 12, paddingVertical: 10 }}>
         {meta.title && (
-          <Text style={{ fontSize: 13, fontWeight: "600", color: "#111827", marginBottom: 4 }} numberOfLines={2}>
+          <Text
+            style={{
+              fontSize: 13,
+              fontWeight: "600",
+              color: "#111827",
+              marginBottom: 4,
+            }}
+            numberOfLines={2}
+          >
             {meta.title}
           </Text>
         )}
 
         {meta.description && (
-          <Text style={{ fontSize: 11, color: "#4b5563", marginBottom: 6 }} numberOfLines={2}>
+          <Text
+            style={{ fontSize: 11, color: "#4b5563", marginBottom: 6 }}
+            numberOfLines={2}
+          >
             {meta.description}
           </Text>
         )}
 
-        <Text style={{ fontSize: 11, color: "#2563eb", textDecorationLine: "underline" }} numberOfLines={1}>
+        <Text
+          style={{
+            fontSize: 11,
+            color: "#2563eb",
+            textDecorationLine: "underline",
+          }}
+          numberOfLines={1}
+        >
           {meta.url}
         </Text>
       </View>
@@ -251,75 +392,134 @@ type MessageRowProps = {
   highlightQuery: string;
   onLongPress: (
     m: MessageResponse,
-    layout: { x: number; y: number; width: number; height: number }
+    layout: { x: number; y: number; width: number; height: number },
   ) => void;
 };
 
-const MessageRow = memo(({ m, isOwn, isFirstInGroup, isLastInGroup, highlightedMessageId, highlightQuery, onLongPress }: MessageRowProps) => {
-  // decide whether this message should have bubble background
-  let shouldHaveBg = true;
-  if (m.type === "notification") shouldHaveBg = false;
-  if (["video_call", "audio_call", "link"].includes(m.type)) shouldHaveBg = false;
-  if (m.type === "media") {
-    try {
-      const parsed = JSON.parse(m.content);
-      if (["image", "video", "audio"].includes(parsed.mediaType)) shouldHaveBg = false;
-    } catch {}
-  }
+const MessageRow = memo(
+  ({
+    m,
+    isOwn,
+    isFirstInGroup,
+    isLastInGroup,
+    highlightedMessageId,
+    highlightQuery,
+    onLongPress,
+  }: MessageRowProps) => {
+    // decide whether this message should have bubble background
+    let shouldHaveBg = true;
+    if (m.type === "notification") shouldHaveBg = false;
+    if (["video_call", "audio_call", "link"].includes(m.type))
+      shouldHaveBg = false;
+    if (m.type === "media") {
+      try {
+        const parsed = JSON.parse(m.content);
+        if (["image", "video", "audio"].includes(parsed.mediaType))
+          shouldHaveBg = false;
+      } catch {}
+    }
 
-  // Only text messages are long-press actionable
-  const isActionable = m.type === "text";
+    // Only text messages are long-press actionable
+    const isActionable = m.type === "text";
 
-  const Bubble = (
-    <View style={shouldHaveBg ? (isOwn ? styles.bubbleOwn : styles.bubbleOther) : undefined}>
-      {renderMessageContent(m, isOwn, highlightedMessageId, highlightQuery)}
-    </View>
-  );
+    const Bubble = (
+      <View
+        style={
+          shouldHaveBg
+            ? isOwn
+              ? styles.bubbleOwn
+              : styles.bubbleOther
+            : undefined
+        }
+      >
+        {renderMessageContent(m, isOwn, highlightedMessageId, highlightQuery)}
+      </View>
+    );
 
-  return (
-    <View style={[styles.row, { justifyContent: isOwn ? "flex-end" : "flex-start" }]}>
-      {!isOwn && (
-        <View style={styles.avatarWrapper}>
-          {isLastInGroup ? (
-            <Image source={{ uri: normalizeImageUrl(m.sender.imageUrl) || DEFAULT_AVATAR }} style={styles.avatar} />
-          ) : null}
-        </View>
-      )}
+    return (
+      <View
+        style={[
+          styles.row,
+          { justifyContent: isOwn ? "flex-end" : "flex-start" },
+        ]}
+      >
+        {!isOwn && (
+          <View style={styles.avatarWrapper}>
+            {isLastInGroup ? (
+              <Image
+                source={{
+                  uri: normalizeImageUrl(m.sender.imageUrl) || DEFAULT_AVATAR,
+                }}
+                style={styles.avatar}
+              />
+            ) : null}
+          </View>
+        )}
 
-      <View style={[styles.messageWrapper, { alignItems: isOwn ? "flex-end" : "flex-start", marginHorizontal: isOwn ? 0 : 8 }]}>
-        {!isOwn && isFirstInGroup && <Text style={styles.nameText}>{m.sender.fullName}</Text>}
-
-        <View style={{ maxWidth: "80%", flexDirection: "row", alignItems: "flex-end" }}>
-          {isActionable ? (
-            <Pressable
-              onLongPress={(e) => {
-                const { pageX, pageY } = e.nativeEvent;
-                // pass a compact layout; openActionMenu will decide which side to show
-                onLongPress(m, { x: pageX - 70, y: pageY - 10, width: 140, height: 0 });
-              }}
-              delayLongPress={300}
-            >
-              {Bubble}
-            </Pressable>
-          ) : (
-            Bubble
+        <View
+          style={[
+            styles.messageWrapper,
+            {
+              alignItems: isOwn ? "flex-end" : "flex-start",
+              marginHorizontal: isOwn ? 0 : 8,
+            },
+          ]}
+        >
+          {!isOwn && isFirstInGroup && (
+            <Text style={styles.nameText}>{m.sender.fullName}</Text>
           )}
+
+          <View
+            style={{
+              maxWidth: "80%",
+              flexDirection: "row",
+              alignItems: "flex-end",
+            }}
+          >
+            {isActionable ? (
+              <Pressable
+                onLongPress={(e) => {
+                  const { pageX, pageY } = e.nativeEvent;
+                  // pass a compact layout; openActionMenu will decide which side to show
+                  onLongPress(m, {
+                    x: pageX - 70,
+                    y: pageY - 10,
+                    width: 140,
+                    height: 0,
+                  });
+                }}
+                delayLongPress={300}
+              >
+                {Bubble}
+              </Pressable>
+            ) : (
+              Bubble
+            )}
+          </View>
         </View>
       </View>
-    </View>
-  );
-}, (prev, next) => prev.m.id === next.m.id && prev.isOwn === next.isOwn && prev.isFirstInGroup === next.isFirstInGroup && prev.isLastInGroup === next.isLastInGroup && prev.highlightedMessageId === next.highlightedMessageId && prev.highlightQuery === next.highlightQuery);
+    );
+  },
+  (prev, next) =>
+    prev.m.id === next.m.id &&
+    prev.isOwn === next.isOwn &&
+    prev.isFirstInGroup === next.isFirstInGroup &&
+    prev.isLastInGroup === next.isLastInGroup &&
+    prev.highlightedMessageId === next.highlightedMessageId &&
+    prev.highlightQuery === next.highlightQuery,
+);
 
 export default function ConversationChatScreen() {
   const { user, currentUserId } = useChatContext();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { conversation, usersPresence, jumpMessage, jumpQuery } = route.params as {
-    conversation: ConversationResponse;
-    usersPresence: Record<string, number>;
-    jumpMessage?: MessageResponse;
-    jumpQuery?: string;
-  };
+  const { conversation, usersPresence, jumpMessage, jumpQuery } =
+    route.params as {
+      conversation: ConversationResponse;
+      usersPresence: Record<string, number>;
+      jumpMessage?: MessageResponse;
+      jumpQuery?: string;
+    };
   const conversationId = conversation.id;
   const [messages, setMessages] = useState<MessageResponse[]>([]);
   const [loading, setLoading] = useState(false);
@@ -329,13 +529,21 @@ export default function ConversationChatScreen() {
   const [hasMore, setHasMore] = useState(true);
   const [typingUsers, setTypingUsers] = useState<Record<string, boolean>>({});
   const [isTyping, setIsTyping] = useState(false);
-  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<
+    string | null
+  >(null);
   const [highlightQuery, setHighlightQuery] = useState<string>("");
   const [translatingIds, setTranslatingIds] = useState<string[]>([]);
   const [actionMenuVisible, setActionMenuVisible] = useState(false);
-  const [actionMenuPosition, setActionMenuPosition] = useState<{ x: number; y: number } | null>(null);
-  const [actionMenuSide, setActionMenuSide] = useState<'left' | 'right'>('right');
-  const [selectedMessageForAction, setSelectedMessageForAction] = useState<MessageResponse | null>(null);
+  const [actionMenuPosition, setActionMenuPosition] = useState<{
+    x: number;
+    y: number;
+  } | null>(null);
+  const [actionMenuSide, setActionMenuSide] = useState<"left" | "right">(
+    "right",
+  );
+  const [selectedMessageForAction, setSelectedMessageForAction] =
+    useState<MessageResponse | null>(null);
   const stompClientRef = useRef<StompJs.Client | null>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const flatListRef = useRef<FlatList | null>(null);
@@ -349,13 +557,19 @@ export default function ConversationChatScreen() {
   const [firstLoad, setFirstLoad] = useState(true);
 
   const getUserLanguage = () => {
-    return (user && (user.languageCode || (user as any).language || (user as any).preferredLanguage)) || null;
+    return (
+      (user &&
+        (user.languageCode ||
+          (user as any).language ||
+          (user as any).preferredLanguage)) ||
+      null
+    );
   };
 
   // Open action menu for a message
   const openActionMenu = (
     m: MessageResponse,
-    layout: { x: number; y: number; width: number; height: number }
+    layout: { x: number; y: number; width: number; height: number },
   ) => {
     const isOwn = m.sender.userId === currentUserId;
     setSelectedMessageForAction(m);
@@ -363,7 +577,7 @@ export default function ConversationChatScreen() {
       x: layout.x,
       y: layout.y,
     });
-    setActionMenuSide(isOwn ? 'left' : 'right');
+    setActionMenuSide(isOwn ? "left" : "right");
     setActionMenuVisible(true);
   };
 
@@ -386,15 +600,27 @@ export default function ConversationChatScreen() {
           contextPivotRef.current = jumpMessage.id;
           contextHasMoreOlderRef.current = true;
           contextHasMoreNewerRef.current = true;
-          const ctx = await fetchMessageContext(conversationId, jumpMessage.id, PAGE_SIZE, PAGE_SIZE);
-          const sorted = ctx.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+          const ctx = await fetchMessageContext(
+            conversationId,
+            jumpMessage.id,
+            PAGE_SIZE,
+            PAGE_SIZE,
+          );
+          const sorted = ctx.sort(
+            (a, b) =>
+              new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+          );
           setMessages(sorted);
           setHighlightedMessageId(jumpMessage.id);
           setHighlightQuery(jumpQuery || "");
           setTimeout(() => {
-            const index = sorted.findIndex(m => m.id === jumpMessage.id);
+            const index = sorted.findIndex((m) => m.id === jumpMessage.id);
             if (index !== -1) {
-              flatListRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.5 });
+              flatListRef.current?.scrollToIndex({
+                index,
+                animated: true,
+                viewPosition: 0.5,
+              });
             }
           }, 1000);
         } else {
@@ -404,7 +630,11 @@ export default function ConversationChatScreen() {
           contextHasMoreNewerRef.current = false;
           const data = await fetchMessages(conversationId, 0, PAGE_SIZE);
           setMessages(
-            data.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+            data.sort(
+              (a, b) =>
+                new Date(a.createdAt).getTime() -
+                new Date(b.createdAt).getTime(),
+            ),
           );
           setPage(1);
           setHasMore(data.length === PAGE_SIZE);
@@ -464,7 +694,7 @@ export default function ConversationChatScreen() {
           } catch (err) {
             console.error("Failed to parse typing event", err);
           }
-        }
+        },
       );
     };
 
@@ -489,18 +719,19 @@ export default function ConversationChatScreen() {
     });
   };
 
-  const assetToFile = (asset: any) => ({
-    uri: asset.uri,
-    name: asset.fileName || asset.uri.split("/").pop() || "file",
-    type: asset.mimeType || "application/octet-stream",
-  }) as any;
+  const assetToFile = (asset: any) =>
+    ({
+      uri: asset.uri,
+      name: asset.fileName || asset.uri.split("/").pop() || "file",
+      type: asset.mimeType || "application/octet-stream",
+    }) as any;
 
   const handlePickMedia = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) return;
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images', 'videos'],
+      mediaTypes: ["images", "videos"],
       allowsMultipleSelection: true,
       quality: 1,
     });
@@ -515,7 +746,7 @@ export default function ConversationChatScreen() {
         currentUserId,
         user.fullName,
         user.imageUrl || DEFAULT_AVATAR,
-        files
+        files,
       );
 
       setTimeout(() => {
@@ -543,7 +774,7 @@ export default function ConversationChatScreen() {
         currentUserId,
         user.fullName,
         user.imageUrl || DEFAULT_AVATAR,
-        files
+        files,
       );
 
       setTimeout(() => {
@@ -571,7 +802,7 @@ export default function ConversationChatScreen() {
         currentUserId,
         user.fullName,
         user.imageUrl || DEFAULT_AVATAR,
-        [file]
+        [file],
       );
 
       setTimeout(() => {
@@ -611,7 +842,7 @@ export default function ConversationChatScreen() {
           senderImageUrl: user.imageUrl || DEFAULT_AVATAR,
           content: newMessage.trim(),
           type: isLink ? "link" : "text",
-        });      
+        });
 
         setNewMessage("");
         setIsTyping(false);
@@ -638,14 +869,19 @@ export default function ConversationChatScreen() {
         "You need to set your preferred language before translating. Do you want to update your profile now?",
         [
           { text: "Cancel", style: "cancel" },
-          { text: "Set now", onPress: () => navigation.navigate('ProfileEdit') },
-        ]
+          {
+            text: "Set now",
+            onPress: () => navigation.navigate("ProfileEdit"),
+          },
+        ],
       );
       return;
     }
 
     // skip if translation already exists
-    const translatedExists = messages.some((msg) => msg.id === `${m.id}-translated`);
+    const translatedExists = messages.some(
+      (msg) => msg.id === `${m.id}-translated`,
+    );
     if (translatedExists) return;
 
     // mark translating
@@ -665,8 +901,13 @@ export default function ConversationChatScreen() {
 
       // scroll to show translated message
       setTimeout(() => {
-        const idx = messages.findIndex(msg => msg.id === m.id);
-        if (idx !== -1) flatListRef.current?.scrollToIndex({ index: idx + 1, animated: true, viewPosition: 0.5 });
+        const idx = messages.findIndex((msg) => msg.id === m.id);
+        if (idx !== -1)
+          flatListRef.current?.scrollToIndex({
+            index: idx + 1,
+            animated: true,
+            viewPosition: 0.5,
+          });
       }, 300);
     } catch (err) {
       console.error("Translation failed:", err);
@@ -685,14 +926,21 @@ export default function ConversationChatScreen() {
       if (contextModeRef.current) {
         const firstId = messages[0]?.id;
         if (firstId) {
-          const older = await fetchOldMessages(conversationId, firstId, PAGE_SIZE);
+          const older = await fetchOldMessages(
+            conversationId,
+            firstId,
+            PAGE_SIZE,
+          );
           if (older.length > 0) {
             setMessages((prev) => mergeAndSortMessages(prev, older));
             setTimeout(() => {
               const newH = contentHeightRef.current || 0;
               const diff = newH - prevContentHeight;
               if (diff > 0) {
-                flatListRef.current?.scrollToOffset({ offset: diff, animated: false });
+                flatListRef.current?.scrollToOffset({
+                  offset: diff,
+                  animated: false,
+                });
               }
             }, 1000);
           } else {
@@ -712,7 +960,10 @@ export default function ConversationChatScreen() {
             const newH = contentHeightRef.current || 0;
             const diff = newH - prevContentHeight;
             if (diff > 0) {
-              flatListRef.current?.scrollToOffset({ offset: diff, animated: false });
+              flatListRef.current?.scrollToOffset({
+                offset: diff,
+                animated: false,
+              });
             }
           }, 1000);
         } else {
@@ -729,7 +980,8 @@ export default function ConversationChatScreen() {
 
   // Load newer messages when near bottom in context mode
   const loadNewerMessages = async () => {
-    if (!contextModeRef.current || loading || !contextHasMoreNewerRef.current) return;
+    if (!contextModeRef.current || loading || !contextHasMoreNewerRef.current)
+      return;
 
     setLoading(true);
     try {
@@ -768,42 +1020,68 @@ export default function ConversationChatScreen() {
       loadMorePreserveScroll(prevHeight);
     }
 
-    const nearBottom = contentSize.height - contentOffset.y - layoutMeasurement.height < 50;
+    const nearBottom =
+      contentSize.height - contentOffset.y - layoutMeasurement.height < 50;
     if (nearBottom && contextModeRef.current && !loading) {
       if (!contextHasMoreNewerRef.current) return;
       loadNewerMessages();
     }
   };
 
-  const renderMessageItem = useCallback(({ item: m }: { item: MessageResponse }) => {
-    const isOwn = m.sender.userId === currentUserId;
+  const renderMessageItem = useCallback(
+    ({ item: m }: { item: MessageResponse }) => {
+      const isOwn = m.sender.userId === currentUserId;
 
-    if (m.type === "notification") return renderMessageContent(m, isOwn, highlightedMessageId, highlightQuery);
+      if (m.type === "notification")
+        return renderMessageContent(
+          m,
+          isOwn,
+          highlightedMessageId,
+          highlightQuery,
+        );
 
-    const idx = messages.indexOf(m);
-    let prev: MessageResponse | undefined = undefined;
-    for (let i = idx - 1; i >= 0; i--) {
-      if (messages[i].type !== "notification") {
-        prev = messages[i];
-        break;
+      const idx = messages.indexOf(m);
+      let prev: MessageResponse | undefined = undefined;
+      for (let i = idx - 1; i >= 0; i--) {
+        if (messages[i].type !== "notification") {
+          prev = messages[i];
+          break;
+        }
       }
-    }
 
-    let next: MessageResponse | undefined = undefined;
-    for (let i = idx + 1; i < messages.length; i++) {
-      if (messages[i].type !== "notification") {
-        next = messages[i];
-        break;
+      let next: MessageResponse | undefined = undefined;
+      for (let i = idx + 1; i < messages.length; i++) {
+        if (messages[i].type !== "notification") {
+          next = messages[i];
+          break;
+        }
       }
-    }
 
-    const isFirstInGroup = !prev || prev.sender.userId !== m.sender.userId;
-    const isLastInGroup = !next || next.sender.userId !== m.sender.userId;
+      const isFirstInGroup = !prev || prev.sender.userId !== m.sender.userId;
+      const isLastInGroup = !next || next.sender.userId !== m.sender.userId;
 
-    const isTranslating = translatingIds.includes(m.id);
+      const isTranslating = translatingIds.includes(m.id);
 
-    return <MessageRow m={m} isOwn={isOwn} isFirstInGroup={isFirstInGroup} isLastInGroup={isLastInGroup} highlightedMessageId={highlightedMessageId} highlightQuery={highlightQuery} onLongPress={openActionMenu} />;
-  }, [messages, currentUserId, highlightedMessageId, highlightQuery, translatingIds]);
+      return (
+        <MessageRow
+          m={m}
+          isOwn={isOwn}
+          isFirstInGroup={isFirstInGroup}
+          isLastInGroup={isLastInGroup}
+          highlightedMessageId={highlightedMessageId}
+          highlightQuery={highlightQuery}
+          onLongPress={openActionMenu}
+        />
+      );
+    },
+    [
+      messages,
+      currentUserId,
+      highlightedMessageId,
+      highlightQuery,
+      translatingIds,
+    ],
+  );
 
   // Auto clear error
   useEffect(() => {
@@ -819,219 +1097,291 @@ export default function ConversationChatScreen() {
     .filter(Boolean);
 
   return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-      style={{ flex: 1, backgroundColor: "#fff" }}
-      keyboardVerticalOffset={90}
+    <SafeAreaView
+      style={{
+        flex: 1,
+        backgroundColor: "#000000",
+      }}
     >
-      <ChatHeader
-        conversation={conversation}
-        currentUserId={currentUserId}
-        usersPresence={usersPresence}
-        onBackPress={() => navigation.goBack()}
-        onOpenDetails={() => navigation.navigate("ConversationDetails", { conversation })}
-      />
+      <KeyboardAvoidingView
+        behavior={Platform.OS === "ios" ? "padding" : undefined}
+        style={{ flex: 1, backgroundColor: "#fff" }}
+      >
+        <ChatHeader
+          conversation={conversation}
+          currentUserId={currentUserId}
+          usersPresence={usersPresence}
+          onBackPress={() => navigation.goBack()}
+          onOpenDetails={() =>
+            navigation.navigate("ConversationDetails", { conversation })
+          }
+        />
 
-      <View style={{ flex: 1 }}>
-        {loading && !messages.length ? (
-          <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-            <ActivityIndicator size="large" color="#3b82f6" />
-          </View>
-        ) : (
-          <FlatList
-            ref={flatListRef}
-            data={messages}
-            renderItem={renderMessageItem}
-            keyExtractor={(item) => item.id}
-            onScroll={handleScroll}
-            scrollEventThrottle={16}
-            maintainVisibleContentPosition={{
-              minIndexForVisible: 1,
-              autoscrollToTopThreshold: -1,
-            }}
-            initialNumToRender={20}
-            maxToRenderPerBatch={20}
-            windowSize={21}
-            removeClippedSubviews={Platform.OS === "android"}
-            ListHeaderComponent={
-              loading ? (
-                <ActivityIndicator
-                  size="small"
-                  color="#3b82f6"
-                  style={{ marginVertical: 8 }}
-                />
-              ) : null
-            }
-            ListEmptyComponent={
-              !loading ? (
-                <View style={{ flex: 1, justifyContent: "center", alignItems: "center" }}>
-                  <Text style={{ color: "#9ca3af", fontSize: 14 }}>
-                    No messages yet
-                  </Text>
-                </View>
-              ) : null
-            }
-          />
-        )}
+        <View style={{ flex: 1 }}>
+          {loading && !messages.length ? (
+            <View
+              style={{
+                flex: 1,
+                justifyContent: "center",
+                alignItems: "center",
+              }}
+            >
+              <ActivityIndicator size="large" color="#3b82f6" />
+            </View>
+          ) : (
+            <FlatList
+              ref={flatListRef}
+              data={messages}
+              renderItem={renderMessageItem}
+              keyExtractor={(item) => item.id}
+              onScroll={handleScroll}
+              scrollEventThrottle={16}
+              maintainVisibleContentPosition={{
+                minIndexForVisible: 1,
+                autoscrollToTopThreshold: -1,
+              }}
+              initialNumToRender={20}
+              maxToRenderPerBatch={20}
+              windowSize={21}
+              removeClippedSubviews={Platform.OS === "android"}
+              ListHeaderComponent={
+                loading ? (
+                  <ActivityIndicator
+                    size="small"
+                    color="#3b82f6"
+                    style={{ marginVertical: 8 }}
+                  />
+                ) : null
+              }
+              ListEmptyComponent={
+                !loading ? (
+                  <View
+                    style={{
+                      flex: 1,
+                      justifyContent: "center",
+                      alignItems: "center",
+                    }}
+                  >
+                    <Text style={{ color: "#9ca3af", fontSize: 14 }}>
+                      No messages yet
+                    </Text>
+                  </View>
+                ) : null
+              }
+            />
+          )}
 
-        {/* Typing Indicator */}
-        {activeTypingUsers.length > 0 && (
-          <TypingIndicator users={activeTypingUsers as any} />
-        )}
+          {/* Typing Indicator */}
+          {activeTypingUsers.length > 0 && (
+            <TypingIndicator users={activeTypingUsers as any} />
+          )}
 
-        {errorMsg && (
-          <View
-            style={{
-              backgroundColor: "#fee2e2",
-              paddingHorizontal: 12,
-              paddingVertical: 8,
-            }}
-          >
-            <Text style={{ color: "#dc2626", fontSize: 12 }}>{errorMsg}</Text>
-          </View>
-        )}
-        {audioRecorder.isRecording && (
+          {errorMsg && (
+            <View
+              style={{
+                backgroundColor: "#fee2e2",
+                paddingHorizontal: 12,
+                paddingVertical: 8,
+              }}
+            >
+              <Text style={{ color: "#dc2626", fontSize: 12 }}>{errorMsg}</Text>
+            </View>
+          )}
+          {audioRecorder.isRecording && (
+            <View
+              style={{
+                flexDirection: "row",
+                alignItems: "center",
+                paddingHorizontal: 12,
+                paddingBottom: 6,
+              }}
+            >
+              <MaterialIcons
+                name="fiber-manual-record"
+                size={12}
+                color="#ef4444"
+              />
+              <Text style={{ marginLeft: 6, color: "#ef4444", fontSize: 12 }}>
+                Recording... {Math.floor(audioRecorder.duration / 1000)}s
+              </Text>
+            </View>
+          )}
+
+          {/* Input Area */}
           <View
             style={{
               flexDirection: "row",
-              alignItems: "center",
               paddingHorizontal: 12,
-              paddingBottom: 6,
+              paddingVertical: 12,
+              borderTopWidth: 1,
+              borderTopColor: "#e5e7eb",
+              alignItems: "flex-end",
+              gap: 8,
             }}
           >
-            <MaterialIcons name="fiber-manual-record" size={12} color="#ef4444" />
-            <Text style={{ marginLeft: 6, color: "#ef4444", fontSize: 12 }}>
-              Recording... {Math.floor(audioRecorder.duration / 1000)}s
-            </Text>
-          </View>
-        )}
-
-        {/* Input Area */}
-        <View
-          style={{
-            flexDirection: "row",
-            paddingHorizontal: 12,
-            paddingVertical: 12,
-            borderTopWidth: 1,
-            borderTopColor: "#e5e7eb",
-            alignItems: "flex-end",
-            gap: 8,
-          }}
-        >
-          <TouchableOpacity
-            onPress={handlePickMedia}
-            style={{ width: 36, height: 36, justifyContent: "center", alignItems: "center" }}
-          >
-            <MaterialIcons name="photo-library" size={20} color="#6b7280" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={handlePickFile}
-            style={{ width: 36, height: 36, justifyContent: "center", alignItems: "center" }}
-          >
-            <MaterialIcons name="attach-file" size={20} color="#6b7280" />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            onPress={handleMicPress}
-            style={{
-              width: 36,
-              height: 36,
-              justifyContent: "center",
-              alignItems: "center",
-            }}
-          >
-            <MaterialIcons
-              name={audioRecorder.isRecording ? "stop-circle" : "mic"}
-              size={22}
-              color={audioRecorder.isRecording ? "#ef4444" : "#6b7280"}
-            />
-          </TouchableOpacity>
-
-          <TextInput
-            style={{
-              flex: 1,
-              borderWidth: 1,
-              borderColor: "#e5e7eb",
-              borderRadius: 20,
-              paddingHorizontal: 16,
-              paddingVertical: 10,
-              fontSize: 14,
-              maxHeight: 100,
-            }}
-            editable={!audioRecorder.isRecording}
-            placeholder={
-              audioRecorder.isRecording
-                ? "Recording audio..."
-                : "Type a message..."
-            }
-            value={newMessage}
-            onChangeText={handleInputChange}
-            multiline={true}
-          />
-
-          <TouchableOpacity
-            onPress={handleSendMessage}
-            style={{
-              backgroundColor: "#3b82f6",
-              width: 36,
-              height: 36,
-              borderRadius: 18,
-              justifyContent: "center",
-              alignItems: "center",
-            }}
-          >
-            <MaterialIcons name="send" size={18} color="#fff" />
-          </TouchableOpacity>
-        </View>
-
-        {/* Action menu overlay (long-press) */}
-        {actionMenuVisible && selectedMessageForAction && (
-          <>
-            <TouchableWithoutFeedback onPress={closeActionMenu}>
-              <View style={StyleSheet.absoluteFill} />
-            </TouchableWithoutFeedback>
-            <View
+            <TouchableOpacity
+              onPress={handlePickMedia}
               style={{
-                position: "absolute",
-                bottom: 66,
-                left: 0,
-                right: 0,
+                width: 36,
+                height: 36,
+                justifyContent: "center",
+                alignItems: "center",
               }}
-              pointerEvents="box-none"
             >
-              <View style={{ backgroundColor: "#fff", borderRadius: 8, paddingVertical: 16, paddingHorizontal: 8, elevation: 6, shadowColor: "#000", shadowOpacity: 0.12, shadowRadius: 8, flexDirection: "row" }}>
-                <TouchableOpacity
-                  style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 8, paddingHorizontal: 8 }}
-                  onPress={() => {
-                    // close first so it disappears immediately
-                    const msg = selectedMessageForAction;
-                    closeActionMenu();
-                    if (msg) handleTranslation(msg);
-                  }}
-                >
-                  <MaterialIcons name="translate" size={16} color="#111827" />
-                  <Text style={{ fontSize: 14, color: "#111827", marginLeft: 4 }}>Translate</Text>
-                </TouchableOpacity>
+              <MaterialIcons name="photo-library" size={20} color="#6b7280" />
+            </TouchableOpacity>
 
-                <TouchableOpacity
-                  style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 8, paddingHorizontal: 8 }}
-                  onPress={() => {
-                    const msg = selectedMessageForAction;
-                    closeActionMenu();
-                    if (msg?.content) {
-                      Clipboard.setStringAsync(msg.content);
-                    }
+            <TouchableOpacity
+              onPress={handlePickFile}
+              style={{
+                width: 36,
+                height: 36,
+                justifyContent: "center",
+                alignItems: "center",
+              }}
+            >
+              <MaterialIcons name="attach-file" size={20} color="#6b7280" />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              onPress={handleMicPress}
+              style={{
+                width: 36,
+                height: 36,
+                justifyContent: "center",
+                alignItems: "center",
+              }}
+            >
+              <MaterialIcons
+                name={audioRecorder.isRecording ? "stop-circle" : "mic"}
+                size={22}
+                color={audioRecorder.isRecording ? "#ef4444" : "#6b7280"}
+              />
+            </TouchableOpacity>
+
+            <TextInput
+              style={{
+                flex: 1,
+                borderWidth: 1,
+                borderColor: "#e5e7eb",
+                borderRadius: 20,
+                paddingHorizontal: 16,
+                paddingVertical: 10,
+                fontSize: 14,
+                maxHeight: 100,
+              }}
+              editable={!audioRecorder.isRecording}
+              placeholder={
+                audioRecorder.isRecording
+                  ? "Recording audio..."
+                  : "Type a message..."
+              }
+              value={newMessage}
+              onChangeText={handleInputChange}
+              multiline={true}
+            />
+
+            <TouchableOpacity
+              onPress={handleSendMessage}
+              style={{
+                backgroundColor: "#3b82f6",
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+                justifyContent: "center",
+                alignItems: "center",
+              }}
+            >
+              <MaterialIcons name="send" size={18} color="#fff" />
+            </TouchableOpacity>
+          </View>
+
+          {/* Action menu overlay (long-press) */}
+          {actionMenuVisible && selectedMessageForAction && (
+            <>
+              <TouchableWithoutFeedback onPress={closeActionMenu}>
+                <View style={StyleSheet.absoluteFill} />
+              </TouchableWithoutFeedback>
+              <View
+                style={{
+                  position: "absolute",
+                  bottom: 66,
+                  left: 0,
+                  right: 0,
+                }}
+                pointerEvents="box-none"
+              >
+                <View
+                  style={{
+                    backgroundColor: "#fff",
+                    borderRadius: 8,
+                    paddingVertical: 16,
+                    paddingHorizontal: 8,
+                    elevation: 6,
+                    shadowColor: "#000",
+                    shadowOpacity: 0.12,
+                    shadowRadius: 8,
+                    flexDirection: "row",
                   }}
                 >
-                  <MaterialIcons name="content-copy" size={16} color="#111827" />
-                  <Text style={{ fontSize: 14, color: "#111827", marginLeft: 4 }}>Copy</Text>
-                </TouchableOpacity>
+                  <TouchableOpacity
+                    style={{
+                      flex: 1,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      paddingVertical: 8,
+                      paddingHorizontal: 8,
+                    }}
+                    onPress={() => {
+                      // close first so it disappears immediately
+                      const msg = selectedMessageForAction;
+                      closeActionMenu();
+                      if (msg) handleTranslation(msg);
+                    }}
+                  >
+                    <MaterialIcons name="translate" size={16} color="#111827" />
+                    <Text
+                      style={{ fontSize: 14, color: "#111827", marginLeft: 4 }}
+                    >
+                      Translate
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={{
+                      flex: 1,
+                      flexDirection: "row",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      paddingVertical: 8,
+                      paddingHorizontal: 8,
+                    }}
+                    onPress={() => {
+                      const msg = selectedMessageForAction;
+                      closeActionMenu();
+                      if (msg?.content) {
+                        Clipboard.setStringAsync(msg.content);
+                      }
+                    }}
+                  >
+                    <MaterialIcons
+                      name="content-copy"
+                      size={16}
+                      color="#111827"
+                    />
+                    <Text
+                      style={{ fontSize: 14, color: "#111827", marginLeft: 4 }}
+                    >
+                      Copy
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </View>
-            </View>
-          </>
-        )}
-      </View>
-    </KeyboardAvoidingView>
+            </>
+          )}
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }

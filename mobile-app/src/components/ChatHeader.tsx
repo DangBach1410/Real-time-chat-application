@@ -1,15 +1,16 @@
 import React, { useMemo } from "react";
-import {
-  View,
-  Text,
-  Image,
-  TouchableOpacity,
-  StyleSheet,
-} from "react-native";
+import { View, Text, Image, TouchableOpacity, StyleSheet } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { ConversationResponse } from "../api/chatApi";
 import { DEFAULT_AVATAR } from "../constants/common";
 import { normalizeImageUrl } from "../utils/image";
+import { useNavigation } from "@react-navigation/native";
+import type { NativeStackNavigationProp } from "@react-navigation/native-stack";
+import type { MainStackParamList } from "../navigation/types";
+import { startOrJoinCall, type CallRequest } from "../api/callApi";
+import { useChatContext } from "../context/ChatContext";
+
+type NavProp = NativeStackNavigationProp<MainStackParamList, "Chat">;
 
 interface ChatHeaderProps {
   conversation: ConversationResponse;
@@ -26,6 +27,9 @@ export default function ChatHeader({
   onBackPress,
   onOpenDetails,
 }: ChatHeaderProps) {
+  const navigation = useNavigation<NavProp>();
+  const { user } = useChatContext();
+
   const isPrivate = conversation.type === "private";
 
   const otherUser = isPrivate
@@ -36,20 +40,16 @@ export default function ChatHeader({
     ? otherUser?.fullName
     : conversation.name || "Unnamed group";
 
-  const displayImage = isPrivate
-    ? otherUser?.imageUrl
-    : conversation.imageUrl;
+  const displayImage = isPrivate ? otherUser?.imageUrl : conversation.imageUrl;
 
   const lastSeenPrivate =
-    isPrivate && otherUser
-      ? usersPresence[otherUser.userId]
-      : null;
+    isPrivate && otherUser ? usersPresence[otherUser.userId] : null;
 
   const diffMinutes =
     lastSeenPrivate != null
       ? Math.floor((Date.now() - lastSeenPrivate) / 60000)
       : null;
-      
+
   const isOnline = useMemo(() => {
     if (isPrivate && otherUser) {
       if (!lastSeenPrivate) return false;
@@ -78,7 +78,7 @@ export default function ChatHeader({
       );
     }
 
-    // GROUP có image
+    // GROUP has image
     if (conversation.imageUrl) {
       return (
         <Image
@@ -90,7 +90,7 @@ export default function ChatHeader({
       );
     }
 
-    // GROUP không có image → hiển thị 2 member cuối
+    // GROUP no image -> show last 2 members
     const members = conversation.members.slice(-2);
 
     return (
@@ -119,6 +119,37 @@ export default function ChatHeader({
       : "Offline"
     : "Offline";
 
+  // --- Navigation helpers ---
+  const channel = conversation.id || null;
+  const currentMember =
+    conversation.members.find((m) => m.userId === currentUserId) ?? null;
+  const initiatorName =
+    currentMember?.fullName || "Unknown";
+
+  const handleNavigateToCall = async (callType: "audio" | "video") => {
+    if (!channel) {
+      console.warn(
+        "Call channel not available on conversation, cannot start call."
+      );
+      return;
+    }
+    const payload: CallRequest = {
+      type: callType,
+      conversationId: conversation.id,
+      callerId: currentUserId,
+      callerName: user.fullName,
+      callerImage: user.imageUrl || DEFAULT_AVATAR,
+    };
+
+    const response = await startOrJoinCall(payload);
+    navigation.navigate("CallScreen", {
+      channel,
+      agoraUid: response.agoraUid,
+      type: callType,
+      userName: initiatorName,
+    });
+  };
+
   return (
     <View style={styles.container}>
       {/* Left */}
@@ -140,10 +171,16 @@ export default function ChatHeader({
 
       {/* Right */}
       <View style={styles.right}>
-        <TouchableOpacity style={styles.iconBtn}>
+        <TouchableOpacity
+          style={styles.iconBtn}
+          onPress={() => handleNavigateToCall("audio")}
+        >
           <MaterialIcons name="call" size={20} color="#374151" />
         </TouchableOpacity>
-        <TouchableOpacity style={styles.iconBtn}>
+        <TouchableOpacity
+          style={styles.iconBtn}
+          onPress={() => handleNavigateToCall("video")}
+        >
           <MaterialIcons name="videocam" size={22} color="#374151" />
         </TouchableOpacity>
         {onOpenDetails && (

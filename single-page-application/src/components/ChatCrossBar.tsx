@@ -77,9 +77,9 @@ export default function ChatCrossBar({
         callerImage: currentUser.imageUrl || DEFAULT_AVATAR,
       };
 
-      await startOrJoinCall(payload); // gửi đến /api/v1/chat/calls/start
+      const response = await startOrJoinCall(payload);
 
-      const url = `/call?channel=${conversation.id}&type=${type}&uid=${currentUserId}`;
+      const url = `/call?channel=${conversation.id}&type=${type}&agoraUid=${response.agoraUid}`;
       window.open(url, "_blank", "width=1000,height=700");
     } catch (err) {
       console.error("❌ Failed to start call:", err);

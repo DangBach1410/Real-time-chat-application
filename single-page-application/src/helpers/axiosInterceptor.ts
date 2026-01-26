@@ -32,6 +32,13 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
 
+    // Nếu người dụng bị ban
+    if (error.response?.status === 403) {
+      localStorage.clear();
+      window.location.href = '/login';
+      alert('Your account has been banned. Please contact support.');
+      return Promise.reject(error);
+    }
     // Nếu token hết hạn và chưa retry → refresh
     if (error.response?.status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
@@ -52,8 +59,11 @@ api.interceptors.response.use(
           }
         );
 
-        const { accessToken: newAccessToken, refreshToken: newRefreshToken } = res.data as { 
-          accessToken: string; 
+        const {
+          accessToken: newAccessToken,
+          refreshToken: newRefreshToken,
+        } = res.data as {
+          accessToken: string;
           refreshToken: string;
         };
 

@@ -7,7 +7,9 @@ import lombok.NoArgsConstructor;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 @Data
 @Builder
@@ -15,10 +17,15 @@ import java.util.List;
 @AllArgsConstructor
 public class CallInfo {
     private String conversationId;
-    private String type; // "voice" hoặc "video"
+    private String type; // "audio" or "video"
     private String startedBy;
+    private long startedByAgoraUid; // Numeric Agora UID of the caller
     private LocalDateTime startedAt;
-    private List<String> participants = new ArrayList<>();
+    @Builder.Default
+    private List<String> participants = new ArrayList<>(); // String user IDs
+    @Builder.Default
+    private Map<String, Long> participantAgoraUids = new HashMap<>(); // userId -> agoraUid mapping
     private boolean active;
 }
+
 

@@ -26,6 +26,14 @@ public class AuthenticationController {
                 .body(loginResponse);
     }
 
+    @PostMapping("/admin/login")
+    public ResponseEntity<LoginResponse> adminLogin(@RequestBody @Valid LoginRequest loginRequest) {
+        LoginResponse response = authenticationService.loginAdmin(loginRequest);
+        return ResponseEntity
+                .status(response.getStatus())
+                .body(response);
+    }
+
     @PostMapping("/refresh-token")
     public ResponseEntity<LoginResponse> refreshToken(@RequestHeader("Authorization") String authHeader) {
         LoginResponse response = authenticationService.refreshToken(authHeader);

@@ -16,6 +16,7 @@ import { useChatContext } from "../context/ChatContext";
 import { getFriends, type GetFriendResponse } from "../api/friendApi";
 import { useEffect } from "react";
 import { MaterialIcons } from "@expo/vector-icons";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 interface Friend {
   id: string;
@@ -36,7 +37,7 @@ export default function NewGroupScreen() {
   const [errors, setErrors] = useState<{ name?: string; members?: string }>({});
   const [loading, setLoading] = useState(false);
   const [friends, setFriends] = useState<GetFriendResponse[]>([]);
-    // Load friends
+  // Load friends
   useEffect(() => {
     const loadFriends = async () => {
       try {
@@ -59,14 +60,14 @@ export default function NewGroupScreen() {
   const filteredFriends = useMemo(
     () =>
       friends.filter((f: Friend) =>
-        normalize(f.fullName).includes(normalize(search))
+        normalize(f.fullName).includes(normalize(search)),
       ),
-    [search, friends]
+    [search, friends],
   );
 
   const toggleUser = (id: string) => {
     setSelected((prev) =>
-      prev.includes(id) ? prev.filter((u) => u !== id) : [...prev, id]
+      prev.includes(id) ? prev.filter((u) => u !== id) : [...prev, id],
     );
     setErrors((e) => ({ ...e, members: undefined }));
   };
@@ -118,62 +119,67 @@ export default function NewGroupScreen() {
   };
 
   return (
-    <View style={{ flex: 1, backgroundColor: "#fff", padding: 16 }}>
-      <Text style={{ fontSize: 18, fontWeight: "700", marginBottom: 12 }}>
-        New Group
-      </Text>
+    <SafeAreaView
+      style={{
+        flex: 1,
+        backgroundColor: "#000000",
+    }}>
+      <View style={{ flex: 1, backgroundColor: "#fff", padding: 16 }}>
+        <Text style={{ fontSize: 18, fontWeight: "700", marginBottom: 12 }}>
+          New Group
+        </Text>
 
-      {/* Group name */}
-      <TextInput
-        placeholder="Group name"
-        value={name}
-        onChangeText={(v) => {
-          setName(v);
-          setErrors((e) => ({ ...e, name: undefined }));
-        }}
-        style={{
-          borderWidth: 1,
-          borderColor: "#e5e7eb",
-          borderRadius: 8,
-          padding: 10,
-          marginBottom: 4,
-        }}
-      />
-      {errors.name && <Text style={{ color: "red" }}>{errors.name}</Text>}
+        {/* Group name */}
+        <TextInput
+          placeholder="Group name"
+          value={name}
+          onChangeText={(v) => {
+            setName(v);
+            setErrors((e) => ({ ...e, name: undefined }));
+          }}
+          style={{
+            borderWidth: 1,
+            borderColor: "#e5e7eb",
+            borderRadius: 8,
+            padding: 10,
+            marginBottom: 4,
+          }}
+        />
+        {errors.name && <Text style={{ color: "red" }}>{errors.name}</Text>}
 
-      {/* Search */}
-      <TextInput
-        placeholder="Search friends..."
-        value={search}
-        onChangeText={setSearch}
-        style={{
-          borderWidth: 1,
-          borderColor: "#e5e7eb",
-          borderRadius: 8,
-          padding: 10,
-          marginVertical: 10,
-        }}
-      />
+        {/* Search */}
+        <TextInput
+          placeholder="Search friends..."
+          value={search}
+          onChangeText={setSearch}
+          style={{
+            borderWidth: 1,
+            borderColor: "#e5e7eb",
+            borderRadius: 8,
+            padding: 10,
+            marginVertical: 10,
+          }}
+        />
 
-      {/* Friend list */}
-      <FlatList
-        data={filteredFriends}
-        keyExtractor={(item) => item.id}
-        style={{ flex: 1 }}
-        renderItem={({ item }) => {
-          const checked = selected.includes(item.id);
-          return (
-            <TouchableOpacity
-              onPress={() => toggleUser(item.id)}
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                paddingVertical: 8,
-                gap: 10,
-              }}
-            >
-              <View
+        {/* Friend list */}
+        <FlatList
+          data={filteredFriends}
+          keyExtractor={(item) => item.id}
+          style={{ flex: 1 }}
+          renderItem={({ item }) => {
+            const checked = selected.includes(item.id);
+            return (
+              <TouchableOpacity
+                onPress={() => toggleUser(item.id)}
                 style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  paddingVertical: 8,
+                  gap: 10,
+                }}
+              >
+                <View
+                  style={{
                     width: 22,
                     height: 22,
                     borderRadius: 4,
@@ -182,56 +188,66 @@ export default function NewGroupScreen() {
                     backgroundColor: checked ? "#3b82f6" : "#fff",
                     alignItems: "center",
                     justifyContent: "center",
-                }}
+                  }}
                 >
-                {checked && (
+                  {checked && (
                     <MaterialIcons name="check" size={16} color="#fff" />
-                )}
-              </View>
-              <Image
-                source={{ uri: normalizeImageUrl(item.imageUrl) || normalizeImageUrl(DEFAULT_AVATAR) }}
-                style={{ width: 32, height: 32, borderRadius: 16 }}
-              />
-              <Text>{item.fullName}</Text>
-            </TouchableOpacity>
-          );
-        }}
-        ListEmptyComponent={
-          <Text style={{ textAlign: "center", color: "#6b7280" }}>
-            No friends found
-          </Text>
-        }
-      />
-
-      {errors.members && <Text style={{ color: "red" }}>{errors.members}</Text>}
-
-      {/* Buttons */}
-      <View style={{ flexDirection: "row", justifyContent: "flex-end", gap: 12 }}>
-        <TouchableOpacity 
-          onPress={() => navigation.goBack()}
-          style={{
-            backgroundColor: "#e65b5bff",
-            paddingHorizontal: 16,
-            paddingVertical: 10,
-            borderRadius: 6,
-        }}>
-          <Text style={{ color: "#fff", fontWeight: "600" , }}>Cancel</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          disabled={loading}
-          onPress={handleCreate}
-          style={{
-            backgroundColor: "#1d7638ff",
-            paddingHorizontal: 16,
-            paddingVertical: 10,
-            borderRadius: 6,
+                  )}
+                </View>
+                <Image
+                  source={{
+                    uri:
+                      normalizeImageUrl(item.imageUrl) ||
+                      normalizeImageUrl(DEFAULT_AVATAR),
+                  }}
+                  style={{ width: 32, height: 32, borderRadius: 16 }}
+                />
+                <Text>{item.fullName}</Text>
+              </TouchableOpacity>
+            );
           }}
+          ListEmptyComponent={
+            <Text style={{ textAlign: "center", color: "#6b7280" }}>
+              No friends found
+            </Text>
+          }
+        />
+
+        {errors.members && (
+          <Text style={{ color: "red" }}>{errors.members}</Text>
+        )}
+
+        {/* Buttons */}
+        <View
+          style={{ flexDirection: "row", justifyContent: "flex-end", gap: 12 }}
         >
-          <Text style={{ color: "#fff", fontWeight: "600" }}>
-            {loading ? "Creating..." : "Create"}
-          </Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={{
+              backgroundColor: "#e65b5bff",
+              paddingHorizontal: 16,
+              paddingVertical: 10,
+              borderRadius: 6,
+            }}
+          >
+            <Text style={{ color: "#fff", fontWeight: "600" }}>Cancel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            disabled={loading}
+            onPress={handleCreate}
+            style={{
+              backgroundColor: "#1d7638ff",
+              paddingHorizontal: 16,
+              paddingVertical: 10,
+              borderRadius: 6,
+            }}
+          >
+            <Text style={{ color: "#fff", fontWeight: "600" }}>
+              {loading ? "Creating..." : "Create"}
+            </Text>
+          </TouchableOpacity>
+        </View>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
