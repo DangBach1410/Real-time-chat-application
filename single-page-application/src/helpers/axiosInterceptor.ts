@@ -1,7 +1,8 @@
 import axios from 'axios';
+import { API_URL } from '../constants/common';
 
 const api = axios.create({
-  baseURL: 'http://localhost:8762/api/v1', // chỉnh theo API Gateway của bạn
+  baseURL: `${API_URL}:8762/api/v1`, // chỉnh theo API Gateway của bạn
   headers: {
     'Content-Type': 'application/json',
   },
@@ -15,10 +16,7 @@ api.interceptors.request.use(
       config.url?.includes('/login') || config.url?.includes('/register');
 
     if (accessToken && !isAuthUrl) {
-      config.headers = {
-        ...config.headers,
-        Authorization: `Bearer ${accessToken}`,
-      };
+      config.headers.Authorization = `Bearer ${accessToken}`;
     }
 
     return config;
@@ -50,7 +48,7 @@ api.interceptors.response.use(
         }
 
         const res = await axios.post(
-          'http://localhost:8762/api/v1/auth/refresh-token',
+          `${API_URL}:8762/api/v1/auth/refresh-token`,
           {},
           {
             headers: {

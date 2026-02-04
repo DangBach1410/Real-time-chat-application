@@ -1,16 +1,20 @@
-import React, { useEffect, useState, useRef } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import { View, Text, ActivityIndicator } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useNavigation } from "@react-navigation/native";
+import { useFocusEffect, useNavigation } from "@react-navigation/native";
 import SockJS from "sockjs-client";
 import { Client } from "@stomp/stompjs";
 
 import { fetchUserById } from "../api/userApi";
 import type { UserResponse } from "../api/userApi";
 import type { CallRequest } from "../api/callApi";
-// import IncomingCallModal from "../components/IncomingCallModal";
+import { usePushNotifications } from "../hooks/usePushNotifications";
+import { startOrJoinCall } from "../api/callApi"; // Import trực tiếp hàm API
+import IncomingCallModal from "../components/IncomingCallModal";
 
 import { ChatContext } from "../context/ChatContext";
+import { DEFAULT_AVATAR } from "../constants/common";
+import { normalizeImageUrl } from "../utils/image";
 
 function isTokenExpired(token: string): boolean {
   try {
@@ -24,14 +28,12 @@ function isTokenExpired(token: string): boolean {
 
 export default function ChatLayout({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserResponse | null>(null);
-  const [keyword, setKeyword] = useState<string>("");
   const [loading, setLoading] = useState(true);
-  const [incomingCall, setIncomingCall] = useState<CallRequest | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [usersPresence, setUsersPresence] = useState<Record<string, number>>({});
+  const [incomingCall, setIncomingCall] = useState<any | null>(null);
 
   const navigation = useNavigation<any>();
-  const stompClientRef = useRef<Client | null>(null);
 
   // --- Load user ---
   useEffect(() => {
@@ -62,41 +64,32 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
     init();
   }, [navigation]);
 
-  // --- Connect WebSocket & subscribe call ---
-  useEffect(() => {
-    if (!currentUserId) return;
+  // Gọi hook và truyền state setter vào
+  usePushNotifications(currentUserId, user, startOrJoinCall, (data) => setIncomingCall(data));
 
-    const socket = new SockJS("http://localhost:8083/ws");
-    const client = new Client({
-      webSocketFactory: () => socket as any,
-      reconnectDelay: 5000,
-      debug: (msg) => console.log("📡 WS:", msg),
+  const handleAccept = async () => {
+    if (!incomingCall || !user) {
+      console.warn("Cannot accept call: User or Call data is missing");
+      return;
+    }
+    
+    const payload = {
+      type: incomingCall.type,
+      conversationId: incomingCall.conversationId,
+      callerId: currentUserId,
+      callerName: user.fullName,
+      callerImage: user.imageUrl || normalizeImageUrl(DEFAULT_AVATAR) || DEFAULT_AVATAR,
+    };
+
+    const res = await startOrJoinCall(payload);
+    setIncomingCall(null);
+    navigation.navigate("CallScreen", {
+       channel: incomingCall.conversationId,
+       agoraUid: res.agoraUid,
+       type: incomingCall.type,
+       userName: incomingCall.callerName
     });
-
-    client.onConnect = () => {
-      console.log("✅ STOMP connected for user:", currentUserId);
-      client.subscribe(`/topic/call/${currentUserId}`, (message) => {
-        try {
-          const data = JSON.parse(message.body);
-          setIncomingCall(data);
-        } catch (err) {
-          console.error("❌ Failed to parse call message:", err);
-        }
-      });
-    };
-
-    client.onStompError = (frame) => {
-      console.error("STOMP error:", frame.headers["message"]);
-    };
-
-    client.activate();
-    stompClientRef.current = client;
-
-    return () => {
-      client.deactivate();
-      stompClientRef.current = null;
-    };
-  }, [currentUserId]);
+  };
 
   if (loading) {
     return (
@@ -109,23 +102,19 @@ export default function ChatLayout({ children }: { children: React.ReactNode }) 
   if (!user) return null;
 
   return (
-    <ChatContext.Provider value={{ user, keyword, currentUserId, usersPresence, setUsersPresence, setUser }}>
+    <ChatContext.Provider value={{ user, currentUserId, usersPresence, setUsersPresence, setUser }}>
       <View style={{ flex: 1 }}>
-
         {children}
-        {/* 
-        <IncomingCallModal
-          open={!!incomingCall}
-          callerName={incomingCall?.callerName || ""}
-          callerImage={incomingCall?.callerImage}
-          callType={incomingCall?.type || "audio"}
-          conversationId={incomingCall?.conversationId || ""}
-          conversationName={incomingCall?.conversationName}
-          onAccept={() => setIncomingCall(null)}
-          onDecline={() => setIncomingCall(null)}
-          onTimeout={() => setIncomingCall(null)}
-        /> */}
       </View>
+      <IncomingCallModal
+        open={!!incomingCall}
+        callerName={incomingCall?.callerName || "Unknown"}
+        callerImage={incomingCall?.callerImage}
+        callType={incomingCall?.type || "audio"}
+        conversationName={incomingCall?.conversationName}
+        onAccept={handleAccept}
+        onDecline={() => setIncomingCall(null)}
+      />
     </ChatContext.Provider>
   );
 }

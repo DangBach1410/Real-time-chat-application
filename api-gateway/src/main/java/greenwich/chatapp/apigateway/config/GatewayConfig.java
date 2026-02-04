@@ -31,6 +31,9 @@ public class GatewayConfig {
                 .route("translation-service", r -> r.path("/api/v1/translate/**")
                         .filters(f -> f.filter(authenticationFilter))
                         .uri("lb://translation-service"))
+                .route("notification-service", r -> r.path("/api/v1/notifications/**")
+                        .filters(f -> f.filter(authenticationFilter))
+                        .uri("lb://notification-service"))
                 .build();
     }
 }

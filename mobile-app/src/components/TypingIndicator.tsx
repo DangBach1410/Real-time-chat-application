@@ -54,7 +54,7 @@ export default function TypingIndicator({ users }: TypingIndicatorProps) {
         {users.map((u) => (
           <Image
             key={u.userId}
-            source={{ uri: normalizeImageUrl(u.imageUrl) || DEFAULT_AVATAR }}
+            source={{ uri: normalizeImageUrl(u.imageUrl || DEFAULT_AVATAR) }}
             style={styles.avatar}
           />
         ))}

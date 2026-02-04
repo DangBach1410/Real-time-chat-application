@@ -46,6 +46,8 @@ import { createMediaMessages } from "../api/chatApi";
 import { useChatAudioRecorder } from "../hooks/useAudioRecorder";
 import * as Clipboard from "expo-clipboard";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { CallRequest, startOrJoinCall } from "../api/callApi";
+import { API_URL } from '../constants/common';
 
 const PAGE_SIZE = 20;
 const LINK_CARD_WIDTH = 300;
@@ -164,6 +166,9 @@ const renderMessageContent = (
   isOwn: boolean,
   highlightedMessageId: string | null,
   highlightQuery: string,
+  navigation?: any,
+  currentUserId?: string,
+  user?: any,
 ) => {
   switch (m.type) {
     case "text":
@@ -222,6 +227,45 @@ const renderMessageContent = (
     case "video_call":
     case "audio_call": {
       const isVideo = m.type === "video_call";
+      // Hàm xử lý khi bấm vào nút Join
+      const handleJoinCall = async () => {
+        try {
+          if (!navigation || !currentUserId || !user) {
+            console.warn("Navigation or user info is missing");
+            console.log("navigation:", navigation);
+            console.log("currentUserId:", currentUserId);
+            console.log("user:", user);
+            return;
+          }
+          // 1. Chuẩn bị payload (Giả định data, user, userId đã có sẵn trong scope)
+          const payload: CallRequest = {
+            type: isVideo ? "video" : "audio",
+            conversationId: m.conversationId, 
+            callerId: currentUserId,
+            callerName: user.fullName,
+            callerImage: user.imageUrl || DEFAULT_AVATAR,
+          };
+
+          console.log("🚀 Starting/Joining call...");
+
+          // 2. Gọi API để lấy Agora UID
+          const callResponse = await startOrJoinCall(payload);
+
+          console.log("☎️ Joined call via notification:", callResponse);
+
+          // 3. Điều hướng vào màn hình CallScreen
+          navigation.navigate("CallScreen", {
+            channel: m.conversationId,
+            agoraUid: callResponse.agoraUid,
+            type: isVideo ? "video" : "audio",
+            userName: user.fullName,
+          });
+        } catch (error) {
+          console.error("❌ Failed to join call:", error);
+          // Bạn nên thêm Alert ở đây để báo cho người dùng nếu API lỗi
+          Alert.alert("Lỗi", "Không thể tham gia cuộc gọi lúc này.");
+        }
+      };
       return (
         <TouchableOpacity
           style={{
@@ -234,11 +278,7 @@ const renderMessageContent = (
             borderRadius: 12,
             backgroundColor: isVideo ? "#a855f7" : "#6366f1",
           }}
-          onPress={() =>
-            console.log(
-              `${isVideo ? "Video" : "Audio"} call clicked - implement later`,
-            )
-          }
+          onPress={handleJoinCall}
         >
           <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
             <MaterialIcons
@@ -394,6 +434,9 @@ type MessageRowProps = {
     m: MessageResponse,
     layout: { x: number; y: number; width: number; height: number },
   ) => void;
+  navigation: any;
+  currentUserId: string;
+  user: any;
 };
 
 const MessageRow = memo(
@@ -405,6 +448,9 @@ const MessageRow = memo(
     highlightedMessageId,
     highlightQuery,
     onLongPress,
+    navigation,
+    currentUserId,
+    user,
   }: MessageRowProps) => {
     // decide whether this message should have bubble background
     let shouldHaveBg = true;
@@ -432,7 +478,7 @@ const MessageRow = memo(
             : undefined
         }
       >
-        {renderMessageContent(m, isOwn, highlightedMessageId, highlightQuery)}
+        {renderMessageContent(m, isOwn, highlightedMessageId, highlightQuery, navigation, currentUserId, user)}
       </View>
     );
 
@@ -448,7 +494,7 @@ const MessageRow = memo(
             {isLastInGroup ? (
               <Image
                 source={{
-                  uri: normalizeImageUrl(m.sender.imageUrl) || DEFAULT_AVATAR,
+                  uri: normalizeImageUrl(m.sender.imageUrl || DEFAULT_AVATAR),
                 }}
                 style={styles.avatar}
               />
@@ -510,8 +556,6 @@ const MessageRow = memo(
 );
 
 export default function ConversationChatScreen() {
-  const { user, currentUserId } = useChatContext();
-  const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { conversation, usersPresence, jumpMessage, jumpQuery } =
     route.params as {
@@ -555,6 +599,8 @@ export default function ConversationChatScreen() {
   const contextHasMoreNewerRef = useRef<boolean>(true);
   const audioRecorder = useChatAudioRecorder();
   const [firstLoad, setFirstLoad] = useState(true);
+  const navigation = useNavigation<any>();
+  const { user, currentUserId } = useChatContext();
 
   const getUserLanguage = () => {
     return (
@@ -659,7 +705,7 @@ export default function ConversationChatScreen() {
   useEffect(() => {
     if (!conversationId) return;
 
-    const socket = new SockJS("http://10.0.2.2:8083/ws");
+    const socket = new SockJS(`${API_URL}:8083/ws`);
     const client = new StompJs.Client({
       webSocketFactory: () => socket as any,
       debug: (str) => console.log(str),
@@ -871,7 +917,7 @@ export default function ConversationChatScreen() {
           { text: "Cancel", style: "cancel" },
           {
             text: "Set now",
-            onPress: () => navigation.navigate("ProfileEdit"),
+            onPress: () => navigation.navigate("EditProfile"),
           },
         ],
       );
@@ -1038,6 +1084,9 @@ export default function ConversationChatScreen() {
           isOwn,
           highlightedMessageId,
           highlightQuery,
+          navigation,
+          currentUserId,
+          user,
         );
 
       const idx = messages.indexOf(m);
@@ -1071,6 +1120,9 @@ export default function ConversationChatScreen() {
           highlightedMessageId={highlightedMessageId}
           highlightQuery={highlightQuery}
           onLongPress={openActionMenu}
+          navigation={navigation}
+          currentUserId={currentUserId}
+          user={user}
         />
       );
     },

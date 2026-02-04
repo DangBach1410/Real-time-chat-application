@@ -1,8 +1,9 @@
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { API_URL } from '../constants/common';
 
 const api = axios.create({
-  baseURL: "http://10.0.2.2:8762/api/v1",
+  baseURL: API_URL + ":8762/api/v1",
   headers: { "Content-Type": "application/json" },
 });
 
@@ -34,7 +35,7 @@ api.interceptors.response.use(
 
       try {
         const res = await axios.post(
-          "http://10.0.2.2:8762/api/v1/auth/refresh-token",
+          `${API_URL}:8762/api/v1/auth/refresh-token`,
           {},
           { headers: { Authorization: `Bearer ${refreshToken}` } }
         );

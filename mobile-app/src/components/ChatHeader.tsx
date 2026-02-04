@@ -138,7 +138,7 @@ export default function ChatHeader({
       conversationId: conversation.id,
       callerId: currentUserId,
       callerName: user.fullName,
-      callerImage: user.imageUrl || DEFAULT_AVATAR,
+      callerImage: normalizeImageUrl(user.imageUrl || DEFAULT_AVATAR) || DEFAULT_AVATAR,
     };
 
     const response = await startOrJoinCall(payload);

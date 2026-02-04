@@ -16,6 +16,7 @@ import { getFriends, type GetFriendResponse } from "../api/friendApi";
 import { addMembersToConversation, type MemberRequest } from "../api/chatApi";
 import { RouteProp, useNavigation, useRoute } from "@react-navigation/native";
 import { useChatContext } from "../context/ChatContext";
+import { normalizeImageUrl } from "../utils/image";
 
 type RouteParams = {
   AddMember: {
@@ -125,7 +126,7 @@ export default function AddMemberScreen() {
           <TouchableOpacity onPress={() => toggle(item.id)} style={styles.row}>
             <View style={{ flexDirection: "row", alignItems: "center" }}>
               <Image
-                source={{ uri: item.imageUrl || DEFAULT_AVATAR }}
+                source={{ uri: normalizeImageUrl(item.imageUrl || DEFAULT_AVATAR) }}
                 style={styles.avatar}
               />
               <Text style={styles.name}>{item.fullName}</Text>

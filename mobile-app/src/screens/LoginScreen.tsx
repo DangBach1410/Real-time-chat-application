@@ -15,6 +15,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Eye, EyeOff } from "lucide-react-native";
 import { useAuth } from "../context/AuthContext";
 import { Linking } from "react-native";
+import { API_URL } from '../constants/common';
 
 type LoginNavProp = NativeStackNavigationProp<
   AuthStackParamList & MainStackParamList,
@@ -37,6 +38,7 @@ export default function LoginScreen() {
   // -------------------------------
   // Username/password login
   const handleLogin = async () => {
+    console.log(`${API_URL}`);
     setError("");
     setSuccess("");
     try {
@@ -56,9 +58,9 @@ export default function LoginScreen() {
   // -------------------------------
   // OAuth login
   const googleUrl =
-    "http://10.0.2.2:8762/oauth2/authorize/google?redirect_uri=mychatapp://oauth2redirect";
+    `${API_URL}:8762/oauth2/authorize/google?redirect_uri=mychatapp://oauth2redirect`;
   const githubUrl =
-    "http://10.0.2.2:8762/oauth2/authorize/github?redirect_uri=mychatapp://oauth2redirect";
+    `${API_URL}:8762/oauth2/authorize/github?redirect_uri=mychatapp://oauth2redirect`;
 
   const openOAuthUrl = async (url: string) => {
     try {

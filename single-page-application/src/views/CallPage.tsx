@@ -219,7 +219,7 @@ export default function CallPage() {
       if (hasLeftRef.current) return;
 
       const accessToken = localStorage.getItem("accessToken");
-      const url = `http://localhost:8762/api/v1/chat/calls/leave/${channel}/${userId}?userName=${encodeURIComponent(currentUser.fullName)}`;
+      const url = `${APP_ID}:8762/api/v1/chat/calls/leave/${channel}/${userId}?userName=${encodeURIComponent(currentUser.fullName)}`;
 
       fetch(url, {
         method: "DELETE",

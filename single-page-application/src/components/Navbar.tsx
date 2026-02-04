@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { DEFAULT_AVATAR } from "../constants/common";
 import { UserPlus } from "lucide-react";
+import { API_URL } from "../constants/common";
 
 interface NavbarProps {
   onSearch: (keyword: string) => void;
@@ -46,7 +47,7 @@ export default function Navbar({ onSearch, fullName, imageUrl }: NavbarProps) {
         onClick={() => navigate("/chat")}
       >
         <img
-          src="http://localhost:9000/chat-media/JoChat.svg"
+          src={`${API_URL}:9000/chat-media/JoChat.svg`}
           alt="JoChat Logo"
           className="h-14 w-14 object-contain"
         />

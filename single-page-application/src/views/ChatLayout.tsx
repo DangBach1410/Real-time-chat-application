@@ -7,6 +7,7 @@ import type { UserResponse } from "../helpers/userApi";
 import SockJS from "sockjs-client";
 import { Client } from "@stomp/stompjs";
 import type { CallRequest } from "../helpers/callApi";
+import { API_URL } from "../constants/common";
 
 function isTokenExpired(token: string): boolean {
   try {
@@ -60,7 +61,8 @@ export default function ChatLayout() {
     const userId = localStorage.getItem("userId");
     if (!userId) return;
 
-    const socket = new SockJS("http://localhost:8083/ws");
+    // const socket = new SockJS(`${API_URL}:8083/ws`);
+    const socket = new SockJS("/ws");
     const client = new Client({
       webSocketFactory: () => socket,
       reconnectDelay: 5000,

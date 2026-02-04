@@ -48,6 +48,7 @@ export default function EditProfile({ userId, firstName, lastName, email, langua
     setErrorMessage("");
 
     try {
+      console.log("Submitting form:", form);
       const res = await updateUser(userId, form);
       const data: UserResponse = res.data;
 

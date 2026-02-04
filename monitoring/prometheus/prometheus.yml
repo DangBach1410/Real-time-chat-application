@@ -1,0 +1,29 @@
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: 'chatapp-microservices'
+    metrics_path: '/actuator/prometheus'
+    scrape_interval: 5s
+    static_configs:
+      - targets: ['auth-service:8082']
+        labels:
+          application: 'auth-service'
+      - targets: ['chat-service:8083']
+        labels:
+          application: 'chat-service'
+      - targets: ['media-service:8084']
+        labels:
+          application: 'media-service'
+      - targets: ['presence-service:8085']
+        labels:
+          application: 'presence-service'
+      - targets: ['translation-service:8086']
+        labels:
+          application: 'translation-service'
+      - targets: ['admin-service:8087']
+        labels:
+          application: 'admin-service'
+      - targets: ['notification-service:8088']
+        labels:
+          application: 'notification-service'

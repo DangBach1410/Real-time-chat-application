@@ -1,8 +1,9 @@
+import { API_URL } from '../constants/common';
 export const normalizeImageUrl = (url?: string): string | undefined => {
   if (!url) return undefined;
 
-  if (url.includes("localhost")) {
-    return url.replace("localhost", "10.0.2.2");
+  if (url.includes("http://localhost")) {
+    return url.replace("http://localhost", `${API_URL}`);
   }
 
   return url;

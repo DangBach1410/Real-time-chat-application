@@ -190,13 +190,13 @@ public class AdminService {
         Page<AdminAuditLog> auditLogs;
 
         if (action != null && !adminId.isEmpty()) {
-            auditLogs = auditLogRepository.findByActionAndAdminId(action, adminId, pageable);
+            auditLogs = auditLogRepository.findByActionAndAdminIdOrderByCreatedAtDesc(action, adminId, pageable);
         } else if (action != null) {
-            auditLogs = auditLogRepository.findByAction(action, pageable);
+            auditLogs = auditLogRepository.findByActionOrderByCreatedAtDesc(action, pageable);
         } else if (!adminId.isEmpty()) {
-            auditLogs = auditLogRepository.findByAdminId(adminId, pageable);
+            auditLogs = auditLogRepository.findByAdminIdOrderByCreatedAtDesc(adminId, pageable);
         } else {
-            auditLogs = auditLogRepository.findAll(pageable);
+            auditLogs = auditLogRepository.findAllByOrderByCreatedAtDesc(pageable);
         }
 
         return auditLogs.map(log -> AdminAuditLogResponse.builder()

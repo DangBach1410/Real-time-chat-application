@@ -30,9 +30,7 @@ import { leaveCall, getUserIdFromAgoraUid } from "../api/callApi";
 import { useUser } from "../hooks/useUser";
 import { useChatContext } from "../context/ChatContext";
 import { fetchUserById } from "../api/userApi";
-
-// Read APP_ID from env (react-native-config). Fallback to literal if not configured.
-const APP_ID = (Config && (Config.AGORA_APP_ID as string)) || "931193b76aea4620899e6282901cab65";
+import { AGORA_APP_ID } from '../constants/common';
 
 import { DEFAULT_AVATAR } from "../constants/common";
 import { normalizeImageUrl } from "../utils/image";
@@ -209,13 +207,13 @@ export default function CallScreen() {
 
       if (!agoraEngine) throw new Error("Failed to create Agora engine");
 
-      await agoraEngine.initialize({ appId: APP_ID });
+      await agoraEngine.initialize({ appId: AGORA_APP_ID });
 
       // Always enable video capability (even if audio-only initially, user can toggle camera on)
       await agoraEngine.enableVideo();
       await agoraEngine.enableAudio();
 
-      console.log("Agora engine initialized successfully with APP_ID:", APP_ID);
+      console.log("Agora engine initialized successfully with APP_ID:", AGORA_APP_ID);
     } catch (e) {
       console.error("Setup error:", e);
       setError("Failed to setup camera/microphone");

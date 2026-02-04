@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 const api = axios.create({
-  baseURL: 'http://localhost:8762/api/v1', // chỉnh theo API Gateway của bạn
+  baseURL: `${import.meta.env.VITE_API_URL}:8762/api/v1`, // chỉnh theo API Gateway của bạn
   headers: {
     'Content-Type': 'application/json',
   },
@@ -40,7 +40,7 @@ api.interceptors.response.use(
         }
 
         const res = await axios.post(
-          'http://localhost:8762/api/v1/auth/refresh-token',
+          `${import.meta.env.VITE_API_URL}:8762/api/v1/auth/refresh-token`,
           {},
           {
             headers: {

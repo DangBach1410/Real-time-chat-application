@@ -4,7 +4,6 @@ import type { UserResponse } from "../api/userApi";
 
 type ChatContextType = {
   user: UserResponse;
-  keyword: string;
   currentUserId: string;
   usersPresence: Record<string, number>;
   setUsersPresence: React.Dispatch<React.SetStateAction<Record<string, number>>>;

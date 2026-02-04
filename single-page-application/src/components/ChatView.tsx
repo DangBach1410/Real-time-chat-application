@@ -35,6 +35,7 @@ import {
 import { fetchMessageContext, fetchOldMessages, fetchNewMessages } from "../helpers/chatApi";
 import ConversationDetailsModal from "./ConversationDetailsModal";
 import { startOrJoinCall, type CallRequest } from "../helpers/callApi";
+import { API_URL } from "../constants/common";
 
 interface ChatViewProps {
   userId: string;
@@ -257,7 +258,8 @@ export default function ChatView({
   useEffect(() => {
     if (!userId) return;
 
-    const socket = new SockJS("http://localhost:8085/ws-presence");
+    // const socket = new SockJS(`${API_URL}:8085/ws-presence`);
+    const socket = new SockJS("/ws-presence");
     const client = new StompJs.Client({
       webSocketFactory: () => socket,
       debug: (str) => console.log("Presence WS:", str),
@@ -291,7 +293,8 @@ export default function ChatView({
   useEffect(() => {
     if (!userId) return;
 
-    const socket = new SockJS("http://localhost:8083/ws");
+    // const socket = new SockJS(`${API_URL}:8083/ws`);
+    const socket = new SockJS("/ws");
     const client = new StompJs.Client({
       webSocketFactory: () => socket,
       debug: (str) => console.log("Global STOMP:", str),
@@ -384,7 +387,8 @@ export default function ChatView({
       stompClient.current.deactivate();
     }
 
-    const socket = new SockJS("http://localhost:8083/ws");
+    // const socket = new SockJS(`${API_URL}:8083/ws`);
+    const socket = new SockJS("/ws");
     const client = new StompJs.Client({
       webSocketFactory: () => socket,
       debug: (str) => console.log(str),

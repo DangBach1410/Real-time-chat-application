@@ -17,7 +17,7 @@ import { Dropdown } from "react-native-element-dropdown";
 
 export default function EditProfileScreen() {
   const navigation = useNavigation<any>();
-  const { user, currentUserId } = useChatContext();
+  const { user, currentUserId, setUser } = useChatContext();
 
   const [form, setForm] = useState({
     firstName: user.firstName,
@@ -78,10 +78,13 @@ export default function EditProfileScreen() {
 
     try {
       setLoading(true);
+      console.log("Submitting form:", form);
       const res = await updateUser(currentUserId, form);
       const data: UserResponse = res.data;
+      console.log("Update profile response:", data);
 
       if (data.status === 200) {
+        setUser({ ...user, ...form });
         Alert.alert("Success", "Profile updated successfully!", [
           { text: "OK", onPress: () => navigation.goBack() },
         ]);

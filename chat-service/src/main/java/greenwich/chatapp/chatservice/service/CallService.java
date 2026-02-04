@@ -2,9 +2,11 @@ package greenwich.chatapp.chatservice.service;
 
 import greenwich.chatapp.chatservice.dto.request.CallRequest;
 import greenwich.chatapp.chatservice.dto.request.MessageCreateRequest;
+import greenwich.chatapp.chatservice.dto.request.SendNotificationRequest;
 import greenwich.chatapp.chatservice.dto.response.CallResponse;
 import greenwich.chatapp.chatservice.dto.response.MemberResponse;
 import greenwich.chatapp.chatservice.entity.CallInfo;
+import greenwich.chatapp.chatservice.feignclient.NotificationServiceClient;
 import greenwich.chatapp.chatservice.util.AgoraUidGenerator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -16,6 +18,7 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
@@ -27,7 +30,7 @@ public class CallService {
     private final ConversationService conversationService;
     private final SimpMessagingTemplate messagingTemplate;
     private final AgoraUidGenerator agoraUidGenerator;
-
+    private final NotificationServiceClient notificationServiceClient;
     private final Map<String, CallInfo> activeCalls = new ConcurrentHashMap<>();
 
     /**
@@ -107,28 +110,49 @@ public class CallService {
 
                 // Send call event to all members except caller
                 try {
-                    log.debug("[CallService] Fetching conversation members");
                     ResponseEntity<List<MemberResponse>> response = conversationService.getMembers(request.getConversationId());
+                    // Logic định dạng tin nhắn tiếng Anh
+                    String notificationBody = (request.getConversationName() != null && !request.getConversationName().isEmpty())
+                            ? String.format("Incoming %s call to %s...", request.getType(), request.getConversationName())
+                            : String.format("Incoming %s call to you...", request.getType());
                     List<MemberResponse> members = response.getBody();
+
                     if (members != null) {
-                        int notifiedCount = (int) members.stream()
-                                .filter(m -> !m.getUserId().equals(request.getCallerId()))
-                                .peek(m -> {
-                                    String destination = "/topic/call/" + m.getUserId();
-                                    messagingTemplate.convertAndSend(destination, request);
-                                    log.debug("[CallService] Call event sent to userId={}", m.getUserId());
-                                })
-                                .count();
-                        log.info("[CallService] Call event broadcasted to {} members", notifiedCount);
-                    } else {
-                        log.warn("[CallService] No members found for conversation: conversationId={}", 
-                            request.getConversationId());
+                        List<String> targetUserIds = members.stream()
+                                .map(MemberResponse::getUserId)
+                                .filter(id -> !id.equals(request.getCallerId()))
+                                .toList();
+
+                        // --- LOGIC GỬI WEBSOCKET ---
+                        targetUserIds.forEach(userId -> {
+                            String destination = "/topic/call/" + userId;
+                            messagingTemplate.convertAndSend(destination, request);
+                        });
+
+                        // --- LOGIC GỬI PUSH NOTIFICATION QUA FEIGN CLIENT ---
+                        if (!targetUserIds.isEmpty()) {
+                            SendNotificationRequest pushRequest = SendNotificationRequest.builder()
+                                    .userIds(targetUserIds)
+                                    .title(request.getCallerName())
+                                    .body(notificationBody)
+                                    .data(Map.of(
+                                            "type", Objects.requireNonNullElse(request.getType(), ""),
+                                            "conversationId", Objects.requireNonNullElse(request.getConversationId(), ""),
+                                            "conversationName", Objects.requireNonNullElse(request.getConversationName(), ""),
+                                            "callerId", Objects.requireNonNullElse(request.getCallerId(), ""),
+                                            "callerName", Objects.requireNonNullElse(request.getCallerName(), ""),
+                                            "callerImage", Objects.requireNonNullElse(request.getCallerImage(), "")
+                                    ))
+                                    .build();
+
+                            // Gọi Notification Service
+                            notificationServiceClient.sendNotification(pushRequest);
+                            log.info("[CallService] Push notification sent to {} users", targetUserIds.size());
+                        }
                     }
                 } catch (Exception e) {
-                    log.error("[CallService] Error broadcasting call event: conversationId={}", 
-                        request.getConversationId(), e);
+                    log.error("[CallService] Error in broadcasting/pushing call event", e);
                 }
-
             } else {
                 log.info("[CallService] User joining existing call: conversationId={}, userId={}", 
                     request.getConversationId(), request.getCallerId());

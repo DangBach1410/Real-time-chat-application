@@ -23,13 +23,26 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.mobileapp"
+      "package": "greenwich.chatapp.mobileapp",
+      "googleServicesFile": "./google-services.json"
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-font"
-    ]
+      "expo-font",
+      [
+        "expo-notifications",
+        {
+          "sounds": ["./assets/call_ringtone.wav"]
+        }
+      ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "7f2211b5-8e2f-4059-8fbf-e8395bd8987d"
+      }
+    },
+    "owner": "trandangbach2004"
   }
 }

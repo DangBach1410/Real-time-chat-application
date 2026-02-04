@@ -39,3 +39,5 @@ yarn-error.*
 # generated native folders
 /ios
 /android
+
+real-time-7e8fd-firebase-adminsdk-fbsvc-71fae251cc.json

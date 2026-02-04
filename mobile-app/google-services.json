@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "776535874245",
+    "project_id": "real-time-7e8fd",
+    "storage_bucket": "real-time-7e8fd.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:776535874245:android:b483c1675d8df49bcfaeac",
+        "android_client_info": {
+          "package_name": "greenwich.chatapp.mobileapp"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC5AMBCU4DQtNDUuUTOcFVGpWYjAnHOMLk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

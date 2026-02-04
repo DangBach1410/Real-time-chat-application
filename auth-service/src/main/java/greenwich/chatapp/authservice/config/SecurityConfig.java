@@ -21,6 +21,7 @@ public class SecurityConfig {
     private static final String[] WHITE_LIST_URL = {
             "/api/v1/auth/users/register",
             "/api/v1/auth/login",
+            "/api/v1/auth/admin/login",
             "/api/v1/auth/refresh-token",
             "/api/v1/auth/verify-token",
             "/oauth2/authorize",
@@ -29,6 +30,7 @@ public class SecurityConfig {
             "/oauth2/callback/github",
             "/oauth2/callback/google",
             "/oauth2/redirect",
+            "/actuator/**",
     };
 
     private final JwtFilter jwtFilter;

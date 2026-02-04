@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom';
 import { login } from '../helpers/authApi';
 import { AiOutlineEye, AiOutlineEyeInvisible } from 'react-icons/ai';
 import type { LoginRequest, LoginResponse } from '../helpers/authApi';
+import { API_URL } from '../constants/common';
 
 export default function Login() {
   const location = useLocation();
@@ -53,11 +54,11 @@ export default function Login() {
   };
 
   const handleGoogleLogin = () => {
-    window.location.href = 'http://localhost:8762/oauth2/authorize/google';
+    window.location.href = `${API_URL}:8762/oauth2/authorize/google`;
   };
 
   const handleGithubLogin = () => {
-    window.location.href = 'http://localhost:8762/oauth2/authorize/github';
+    window.location.href = `${API_URL}:8762/oauth2/authorize/github`;
   };
 
   return (
