@@ -23,7 +23,6 @@ import { normalizeImageUrl } from "../utils/image";
 import * as StompJs from "@stomp/stompjs";
 import SockJS from "sockjs-client";
 import { DEFAULT_AVATAR } from "../constants/common";
-import { API_URL } from '../constants/common';
 
 const PAGE_SIZE = 20;
 
@@ -195,7 +194,7 @@ export default function HomeTab() {
   useEffect(() => {
     if (!currentUserId) return;
 
-    const socket = new SockJS(`${API_URL}:8085/ws-presence`);
+    const socket = new SockJS(`${process.env.EXPO_PUBLIC_API_URL}:8085/ws-presence`);
     const client = new StompJs.Client({
       webSocketFactory: () => socket as any,
       debug: (str) => console.log("Presence WS:", str),
@@ -242,7 +241,7 @@ export default function HomeTab() {
   useEffect(() => {
     if (!currentUserId) return;
 
-    const socket = new SockJS(`${API_URL}:8083/ws`);
+    const socket = new SockJS(`${process.env.EXPO_PUBLIC_API_URL}:8083/ws`);
     const client = new StompJs.Client({
       webSocketFactory: () => socket as any,
       debug: (str) => console.log("Global STOMP:", str),

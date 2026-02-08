@@ -47,7 +47,6 @@ import { useChatAudioRecorder } from "../hooks/useAudioRecorder";
 import * as Clipboard from "expo-clipboard";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { CallRequest, startOrJoinCall } from "../api/callApi";
-import { API_URL } from '../constants/common';
 
 const PAGE_SIZE = 20;
 const LINK_CARD_WIDTH = 300;
@@ -705,7 +704,7 @@ export default function ConversationChatScreen() {
   useEffect(() => {
     if (!conversationId) return;
 
-    const socket = new SockJS(`${API_URL}:8083/ws`);
+    const socket = new SockJS(`${process.env.EXPO_PUBLIC_API_URL}:8083/ws`);
     const client = new StompJs.Client({
       webSocketFactory: () => socket as any,
       debug: (str) => console.log(str),

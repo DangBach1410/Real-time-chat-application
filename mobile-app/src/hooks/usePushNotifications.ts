@@ -89,7 +89,7 @@ export const usePushNotifications = (
 };
 
 async function registerForPushNotificationsAsync() {
-  if (!Device.isDevice) return null;0
+  if (!Device.isDevice) return null;
 
   if (Platform.OS === "android") {
     await Notifications.setNotificationChannelAsync("incoming_calls_notifications", {
