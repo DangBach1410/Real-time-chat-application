@@ -54,11 +54,11 @@ export default function Login() {
   };
 
   const handleGoogleLogin = () => {
-    window.location.href = `${API_URL}:8762/oauth2/authorize/google`;
+    window.location.href = `${API_URL}:8762/oauth2/authorize/google?redirect_uri=${API_URL}:4000/oauth2/redirect`;
   };
 
   const handleGithubLogin = () => {
-    window.location.href = `${API_URL}:8762/oauth2/authorize/github`;
+    window.location.href = `${API_URL}:8762/oauth2/authorize/github?redirect_uri=${API_URL}:4000/oauth2/redirect`;
   };
 
   return (

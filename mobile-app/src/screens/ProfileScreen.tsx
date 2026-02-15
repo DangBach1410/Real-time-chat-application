@@ -118,15 +118,14 @@ export default function ProfileScreen() {
           <Text style={styles.actionText}>Friend Requests</Text>
         </TouchableOpacity>
 
+        <TouchableOpacity
+          style={styles.actionButton}
+          onPress={() => navigation.navigate("EditProfile")}
+        >
+          <Text style={styles.actionText}>Edit Profile</Text>
+        </TouchableOpacity>
         {!user.provider && (
           <>
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={() => navigation.navigate("EditProfile")}
-            >
-              <Text style={styles.actionText}>Edit Profile</Text>
-            </TouchableOpacity>
-
             <TouchableOpacity
               style={styles.actionButton}
               onPress={() => navigation.navigate("ChangePassword")}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   View,
   Text,
@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   Image,
+  Alert,
 } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { NativeStackNavigationProp } from "@react-navigation/native-stack";
@@ -14,7 +15,12 @@ import { login as callLoginApi } from "../api/authApi";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Eye, EyeOff } from "lucide-react-native";
 import { useAuth } from "../context/AuthContext";
-import { Linking } from "react-native";
+// 1. Add WebBrowser
+import * as WebBrowser from "expo-web-browser";
+import * as Linking from "expo-linking";
+
+// 2. Configure WebBrowser to handle redirects properly
+WebBrowser.maybeCompleteAuthSession();
 
 type LoginNavProp = NativeStackNavigationProp<
   AuthStackParamList & MainStackParamList,
@@ -37,17 +43,13 @@ export default function LoginScreen() {
   // -------------------------------
   // Username/password login
   const handleLogin = async () => {
-    console.log(`${process.env.EXPO_PUBLIC_API_URL}`);
     setError("");
     setSuccess("");
     try {
       const response = await callLoginApi({ username, password });
       const { accessToken, refreshToken, userId } = response.data;
 
-      await AsyncStorage.setItem("accessToken", accessToken);
-      await AsyncStorage.setItem("refreshToken", refreshToken);
-      await AsyncStorage.setItem("userId", userId);
-
+      await saveAuthData(accessToken, refreshToken, userId);
       login();
     } catch (err: any) {
       setError(err.response?.data?.message || "Login failed");
@@ -55,46 +57,48 @@ export default function LoginScreen() {
   };
 
   // -------------------------------
-  // OAuth login
-  const googleUrl =
-    `${process.env.EXPO_PUBLIC_API_URL}:8762/oauth2/authorize/google?redirect_uri=mychatapp://oauth2redirect`;
-  const githubUrl =
-    `${process.env.EXPO_PUBLIC_API_URL}:8762/oauth2/authorize/github?redirect_uri=mychatapp://oauth2redirect`;
+  // Helper: Save Data
+  const saveAuthData = async (accessToken: string, refreshToken: string, userId: string) => {
+    await AsyncStorage.setItem("accessToken", accessToken);
+    await AsyncStorage.setItem("refreshToken", refreshToken);
+    await AsyncStorage.setItem("userId", userId);
+  };
 
-  const openOAuthUrl = async (url: string) => {
+  // -------------------------------
+  // OAuth login Logic
+  // Result: mychatapp://oauth2/redirect
+  const redirectUri = Linking.createURL("oauth2/redirect");
+
+  const handleOAuthLogin = async (provider: "google" | "github") => {
+    setError("");
+
+    const authUrl = `${process.env.EXPO_PUBLIC_API_URL}:8762/oauth2/authorize/${provider}?redirect_uri=${redirectUri}`;
+
     try {
-      const supported = await Linking.canOpenURL(url);
-      if (supported) await Linking.openURL(url);
-    } catch {}
-  };
 
-  const getQueryParams = (url: string) => {
-    const params: Record<string, string> = {};
-    const splitUrl = url.split("?");
-    if (splitUrl.length > 1) {
-      splitUrl[1].split("&").forEach((pair) => {
-        const [key, value] = pair.split("=");
-        if (key && value) params[key] = decodeURIComponent(value);
-      });
+      const result = await WebBrowser.openAuthSessionAsync(authUrl, redirectUri);
+
+      if (result.type === "success" && result.url) {
+
+        const { queryParams } = Linking.parse(result.url);
+        
+        const accessToken = queryParams?.accessToken as string;
+        const refreshToken = queryParams?.refreshToken as string;
+        const userId = queryParams?.userId as string;
+
+        if (accessToken && refreshToken && userId) {
+          await saveAuthData(accessToken, refreshToken, userId);
+          login(); // Trigger context update
+        } else {
+          setError("Login failed: Missing tokens from server");
+        }
+      } 
+      // Handle cancellation if needed (result.type === 'dismiss')
+    } catch (err) {
+      console.error(err);
+      setError("An error occurred during OAuth login");
     }
-    return params;
   };
-
-  useEffect(() => {
-    const sub = Linking.addEventListener("url", async (event) => {
-      const queryParams = getQueryParams(event.url);
-      const { accessToken, refreshToken, userId } = queryParams;
-
-      if (accessToken && refreshToken && userId) {
-        await AsyncStorage.setItem("accessToken", accessToken);
-        await AsyncStorage.setItem("refreshToken", refreshToken);
-        await AsyncStorage.setItem("userId", userId);
-        login();
-      }
-    });
-
-    return () => sub.remove();
-  }, []);
 
   return (
     <View style={styles.container}>
@@ -116,10 +120,9 @@ export default function LoginScreen() {
           />
         </View>
 
-        {/* Password + Eye Icon */}
+        {/* Password */}
         <View style={styles.inputGroup}>
           <Text style={styles.label}>Password</Text>
-
           <View style={styles.passwordWrapper}>
             <TextInput
               style={styles.passwordInput}
@@ -149,7 +152,7 @@ export default function LoginScreen() {
         {/* Google */}
         <TouchableOpacity
           style={styles.googleBtn}
-          onPress={() => openOAuthUrl(googleUrl)}
+          onPress={() => handleOAuthLogin("google")}
         >
           <Image
             source={{
@@ -163,7 +166,7 @@ export default function LoginScreen() {
         {/* GitHub */}
         <TouchableOpacity
           style={styles.githubBtn}
-          onPress={() => openOAuthUrl(githubUrl)}
+          onPress={() => handleOAuthLogin("github")}
         >
           <Image
             source={{
