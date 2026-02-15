@@ -18,13 +18,15 @@ import greenwich.chatapp.authservice.oauth2.util.CookieUtils;
 import greenwich.chatapp.authservice.service.JwtService;
 
 import java.io.IOException;
+import java.net.URI;
+import java.util.Arrays;
 import java.util.Optional;
 
 @Component
 @RequiredArgsConstructor
 public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationSuccessHandler {
     @Value("${app.oauth2.authorizedRedirectUris}")
-    private String redirectUri;
+    private String authorizedRedirectUris;
 
     private final JwtService jwtService;
     private final UserRepository userRepository;
@@ -45,7 +47,11 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
     protected String determineTargetUrl(HttpServletRequest request, HttpServletResponse response, Authentication authentication) {
         Optional<String> redirectUri = CookieUtils.getCookie(request, HttpCookieOAuthorizationRequestRepository.REDIRECT_URI_PARAM_COOKIE_NAME)
                 .map(Cookie::getValue);
-        String targetUrl = redirectUri.orElse(this.redirectUri);
+        // Validate that the requested redirect URI is in our whitelist
+        if (redirectUri.isPresent() && !isAuthorizedRedirectUri(redirectUri.get())) {
+            throw new RuntimeException("Unauthorized Redirect URI");
+        }
+        String targetUrl = redirectUri.orElse(getDefaultTargetUrl());
 
         UserPrincipal userPrincipal = (UserPrincipal) authentication.getPrincipal();
         String accessToken = jwtService.generateAccessToken(userPrincipal);
@@ -59,6 +65,18 @@ public class OAuth2AuthenticationSuccessHandler extends SimpleUrlAuthenticationS
                 .queryParam("refreshToken", refreshToken)
                 .queryParam("userId", userId)
                 .build().toString();
+    }
+    private boolean isAuthorizedRedirectUri(String uri) {
+        // Split the comma-separated list from properties and check if the URI matches
+        return Arrays.stream(authorizedRedirectUris.split(","))
+                .anyMatch(authorizedUri -> {
+                    // Only validate host and port to allow dynamic sub-paths if necessary
+                    URI authorizedURI = URI.create(authorizedUri);
+                    URI clientRedirectURI = URI.create(uri);
+                    return authorizedURI.getScheme().equalsIgnoreCase(clientRedirectURI.getScheme())
+                            && authorizedURI.getHost().equalsIgnoreCase(clientRedirectURI.getHost())
+                            && authorizedURI.getPort() == clientRedirectURI.getPort();
+                });
     }
 
     protected void clearAuthenticationAttributes(HttpServletRequest request, HttpServletResponse response) {

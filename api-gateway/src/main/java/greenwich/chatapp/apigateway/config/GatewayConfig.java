@@ -34,6 +34,10 @@ public class GatewayConfig {
                 .route("notification-service", r -> r.path("/api/v1/notifications/**")
                         .filters(f -> f.filter(authenticationFilter))
                         .uri("lb://notification-service"))
+                .route("chat-service-ws", r -> r.path("/ws/**")
+                        .uri("lb://chat-service"))
+                .route("presence-service-ws", r -> r.path("/ws-presence/**")
+                        .uri("lb://presence-service"))
                 .build();
     }
 }
