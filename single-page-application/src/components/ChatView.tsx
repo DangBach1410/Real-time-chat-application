@@ -258,8 +258,8 @@ export default function ChatView({
   useEffect(() => {
     if (!userId) return;
 
-    // const socket = new SockJS(`${API_URL}:8085/ws-presence`);
-    const socket = new SockJS("/ws-presence");
+    const socket = new SockJS(`${API_URL}:8762/ws-presence`);
+    // const socket = new SockJS("/ws-presence");
     const client = new StompJs.Client({
       webSocketFactory: () => socket,
       debug: (str) => console.log("Presence WS:", str),
@@ -293,8 +293,8 @@ export default function ChatView({
   useEffect(() => {
     if (!userId) return;
 
-    // const socket = new SockJS(`${API_URL}:8083/ws`);
-    const socket = new SockJS("/ws");
+    const socket = new SockJS(`${API_URL}:8762/ws`);
+    // const socket = new SockJS("/ws");
     const client = new StompJs.Client({
       webSocketFactory: () => socket,
       debug: (str) => console.log("Global STOMP:", str),
@@ -387,8 +387,8 @@ export default function ChatView({
       stompClient.current.deactivate();
     }
 
-    // const socket = new SockJS(`${API_URL}:8083/ws`);
-    const socket = new SockJS("/ws");
+    const socket = new SockJS(`${API_URL}:8762/ws`);
+    // const socket = new SockJS("/ws");
     const client = new StompJs.Client({
       webSocketFactory: () => socket,
       debug: (str) => console.log(str),

@@ -1,6 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { getFriends, unfriend, type GetFriendResponse } from "../helpers/friendApi";
+import {
+  getFriends,
+  unfriend,
+  type GetFriendResponse,
+} from "../helpers/friendApi";
 import { updateUserImage } from "../helpers/authApi"; // ✅ api update ảnh
 import { UserMinusIcon, CameraIcon } from "@heroicons/react/24/solid"; // ✅ import thêm icon
 import { DEFAULT_AVATAR } from "../constants/common";
@@ -14,7 +18,13 @@ interface ProfileProps {
   provider?: string; // thêm provider nếu cần
 }
 
-export default function Profile({ fullName, email, imageUrl, userId, provider }: ProfileProps) {
+export default function Profile({
+  fullName,
+  email,
+  imageUrl,
+  userId,
+  provider,
+}: ProfileProps) {
   const [friends, setFriends] = useState<GetFriendResponse[]>([]);
   const [confirmData, setConfirmData] = useState<{
     message: string;
@@ -48,7 +58,6 @@ export default function Profile({ fullName, email, imageUrl, userId, provider }:
     });
   };
 
-
   const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!e.target.files || e.target.files.length === 0) return;
 
@@ -80,11 +89,15 @@ export default function Profile({ fullName, email, imageUrl, userId, provider }:
               alt="Profile"
               className="w-32 h-32 rounded-full object-cover border"
               referrerPolicy="no-referrer"
-              onError={(e) => (e.currentTarget.src = DEFAULT_AVATAR)}
             />
             {/* Nút upload ảnh */}
             <label className="absolute bottom-0 right-0 bg-blue-600 text-white p-2 rounded-full cursor-pointer hover:bg-blue-700 shadow">
-              <input type="file" accept="image/*" hidden onChange={handleImageChange} />
+              <input
+                type="file"
+                accept="image/*"
+                hidden
+                onChange={handleImageChange}
+              />
               <CameraIcon className="w-5 h-5" /> {/* icon thay vì chữ */}
             </label>
           </div>
@@ -96,22 +109,23 @@ export default function Profile({ fullName, email, imageUrl, userId, provider }:
         </div>
 
         {/* Actions */}
-        {(!provider) && (
-          <div className="flex flex-col gap-3">
-            <Link
-              to="/profile/edit"
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-center"
-            >
-              Edit Profile
-            </Link>
+
+        <div className="flex flex-col gap-3">
+          <Link
+            to="/profile/edit"
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition text-center"
+          >
+            Edit Profile
+          </Link>
+          {!provider && (
             <Link
               to="/profile/change-password"
               className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition text-center"
             >
               Change Password
             </Link>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       {/* Friends list */}

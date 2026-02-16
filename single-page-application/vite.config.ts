@@ -1,28 +1,23 @@
-import { defineConfig, loadEnv } from "vite";
+import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
+import fs from 'fs'
+import path from 'path'
 
 // https://vite.dev/config/
-export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd());
+export default defineConfig(() => {
 
   return {
     plugins: [react()],
     server: {
       port: 4000,
       allowedHosts: [
-        "nilsa-tapestried-nonjudicially.ngrok-free.dev",
+        "zochat.duckdns.org",
       ],
-      proxy: {
-        "/ws-presence": {
-          target: `${env.VITE_API_URL}:8085`,
-          ws: true,
-          changeOrigin: true,
-        },
-        "/ws": {
-          target: `${env.VITE_API_URL}:8083`,
-          ws: true,
-          changeOrigin: true,
-        },
+      host: '0.0.0.0', // Cho phép truy cập từ domain ngoài
+      https: {
+        // Đảm bảo tên file khớp với file vừa sinh ra
+        key: fs.readFileSync(path.resolve(__dirname, './zochat.duckdns.org+2-key.pem')),
+        cert: fs.readFileSync(path.resolve(__dirname, './zochat.duckdns.org+2.pem')),
       },
     },
     define: {

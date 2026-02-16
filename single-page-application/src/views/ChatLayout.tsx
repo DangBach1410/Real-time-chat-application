@@ -61,8 +61,8 @@ export default function ChatLayout() {
     const userId = localStorage.getItem("userId");
     if (!userId) return;
 
-    // const socket = new SockJS(`${API_URL}:8083/ws`);
-    const socket = new SockJS("/ws");
+    const socket = new SockJS(`${API_URL}:8762/ws`);
+    // const socket = new SockJS("/ws");
     const client = new Client({
       webSocketFactory: () => socket,
       reconnectDelay: 5000,

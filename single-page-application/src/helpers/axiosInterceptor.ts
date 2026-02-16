@@ -12,8 +12,8 @@ const api = axios.create({
 api.interceptors.request.use(
   (config) => {
     const accessToken = localStorage.getItem('accessToken');
-    const isAuthUrl =
-      config.url?.includes('/login') || config.url?.includes('/register');
+    const authEndpoints = ['/auth/login', '/auth/users/register'];
+    const isAuthUrl = authEndpoints.some(endpoint => config.url?.endsWith(endpoint));
 
     if (accessToken && !isAuthUrl) {
       config.headers.Authorization = `Bearer ${accessToken}`;
