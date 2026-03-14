@@ -11,6 +11,7 @@ import { useUser } from "../hooks/useUser";
 import { DEFAULT_AVATAR } from "../constants/common";
 import { leaveCall, getUserIdFromAgoraUid } from "../helpers/callApi";
 import { fetchUserById } from "../helpers/userApi";
+import { API_URL } from "../constants/common";
 
 export default function CallPage() {
   const url = new URL(window.location.href);
@@ -78,28 +79,49 @@ export default function CallPage() {
         AgoraRTC.setLogLevel(3);
         AgoraRTC.checkSystemRequirements();
 
-        // Use numeric agoraUid from backend (works on Web, compatible with Mobile)
+        // Use numeric agoraUid from backend
         await agoraClient.join(APP_ID, channel, null, agoraUid);
-        localAudioTrack.current = await AgoraRTC.createMicrophoneAudioTrack();
 
-        if (type === "video") {
-          localVideoTrack.current = await AgoraRTC.createCameraVideoTrack();
-          localVideoTrack.current.play("local-player", {
-            fit: "contain",
-            mirror: true
-          }
-          );
-          await agoraClient.publish([localAudioTrack.current, localVideoTrack.current]);
-        } else {
-          await agoraClient.publish([localAudioTrack.current]);
+        const tracksToPublish: (ICameraVideoTrack | IMicrophoneAudioTrack)[] = [];
+
+        // 1. Cố gắng tạo Audio Track
+        try {
+          localAudioTrack.current = await AgoraRTC.createMicrophoneAudioTrack();
+          tracksToPublish.push(localAudioTrack.current);
+        } catch (audioErr) {
+          console.warn("Can not access Microphone:", audioErr);
+          setIsMicOn(false);
         }
 
-        // subscribe to remote users - just subscribe, don't play yet
+        // 2. Cố gắng tạo Video Track nếu type là video
+        if (type === "video") {
+          try {
+            localVideoTrack.current = await AgoraRTC.createCameraVideoTrack();
+            localVideoTrack.current.play("local-player", {
+              fit: "contain",
+              mirror: true
+            });
+            tracksToPublish.push(localVideoTrack.current);
+            setIsCamOn(true);
+          } catch (videoErr) {
+            console.warn("Can not find Camera or access denied:", videoErr);
+            // Fallback: Chuyển state cam thành false để UI đồng bộ
+            setIsCamOn(false); 
+          }
+        }
+
+        // 3. Publish những track nào tạo thành công
+        if (tracksToPublish.length > 0) {
+          await agoraClient.publish(tracksToPublish as any);
+        }
+
+        // 4. Subscribe to remote users (Bây giờ phần này luôn được chạy)
         for (const user of agoraClient.remoteUsers) {
           await agoraClient.subscribe(user, "video").catch(() => {});
           await agoraClient.subscribe(user, "audio").catch(() => {});
         }
         setRemoteUsers([...agoraClient.remoteUsers]);
+        
         // remote user events
         const updateRemoteUsers = () => setRemoteUsers([...agoraClient.remoteUsers]);
         agoraClient.on("user-published", async (user, mediaType) => {
@@ -113,7 +135,7 @@ export default function CallPage() {
           console.log("New user joined:", user.uid);
         });
       } catch (err) {
-        console.error("Agora join error:", err);
+        console.error("Agora join error (Critical):", err);
       }
     };
 
@@ -212,14 +234,14 @@ export default function CallPage() {
     }
   };
 
-  // ---- Leave call when tab closes ----
+// ---- Leave call khi tab đóng hoặc tải lại ----
   useEffect(() => {
     const leaveCallKeepalive = () => {
       if (!currentUser || !channel) return;
-      if (hasLeftRef.current) return;
+      if (hasLeftRef.current) return; // Đảm bảo chỉ gọi 1 lần
 
       const accessToken = localStorage.getItem("accessToken");
-      const url = `${APP_ID}:8762/api/v1/chat/calls/leave/${channel}/${userId}?userName=${encodeURIComponent(currentUser.fullName)}`;
+      const url = `${API_URL}:8762/api/v1/chat/calls/leave/${channel}/${userId}?userName=${encodeURIComponent(currentUser.fullName)}`;
 
       fetch(url, {
         method: "DELETE",
@@ -227,14 +249,30 @@ export default function CallPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${accessToken}`,
         },
-        keepalive: true,
+        keepalive: true, // Vẫn giữ keepalive
       }).catch(err => console.error("Leave call on unload failed:", err));
+
+      hasLeftRef.current = true; // Đánh dấu là đã gọi api
     };
 
-    const handleTabClose = () => leaveCallKeepalive();
-    window.addEventListener("beforeunload", handleTabClose);
-    return () => window.removeEventListener("beforeunload", handleTabClose);
-  }, [currentUser, channel]);
+    // Dùng pagehide (tốt cho mobile/trình duyệt hiện đại) thay vì visibilitychange
+    const handlePageHide = (event: PageTransitionEvent) => {
+      leaveCallKeepalive();
+    };
+
+    // Dùng beforeunload (tốt cho desktop)
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      leaveCallKeepalive();
+    };
+
+    window.addEventListener("pagehide", handlePageHide);
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    return () => {
+      window.removeEventListener("pagehide", handlePageHide);
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [currentUser, channel, userId]);
 
   const totalParticipants = remoteUsers.length + 1;
   const isLocalPIP = totalParticipants > PIP_THRESHOLD;

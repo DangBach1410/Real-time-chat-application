@@ -93,6 +93,8 @@ export default function ChatView({
   const [newMessage, setNewMessage] = useState("");
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [isTranslating, setIsTranslating] = useState(false);
   const [usersPresence, setUsersPresence] = useState<Record<string, number>>(
     {}
   );
@@ -735,7 +737,15 @@ export default function ChatView({
   };
 
   const handleTranslation = async (m: MessageResponse) => {
+    // Block if already translating another message
+    if (isTranslating) {
+      setErrorMsg("Please wait for the previous translation to complete.");
+      return;
+    }
+
     try {
+      setIsTranslating(true);
+
       // nếu chưa có userLanguageCode thì show modal
       if (!userLanguageCode) {
         pendingNavigationRef.current = () => {
@@ -747,7 +757,10 @@ export default function ChatView({
 
       // nếu đã dịch rồi thì không gọi API
       const translatedExists = messages.some((msg) => msg.id === `${m.id}-translated`);
-      if (translatedExists) return;
+      if (translatedExists) {
+        setIsTranslating(false);
+        return;
+      }
 
       const translated = await translateMessage(m, userLanguageCode);
 
@@ -761,6 +774,8 @@ export default function ChatView({
       });
     } catch (err) {
       console.error("Translation failed:", err);
+    } finally {
+      setIsTranslating(false);
     }
   };
       
@@ -806,9 +821,12 @@ export default function ChatView({
   const handleSendMessage = async () => {
     if (
       (!newMessage.trim() && pendingFiles.length === 0) ||
-      !selectedConversation
+      !selectedConversation ||
+      isSendingMessage
     )
       return;
+
+    setIsSendingMessage(true);
 
     try {
       if (newMessage.trim()) {
@@ -871,6 +889,8 @@ export default function ChatView({
     } catch (err) {
       console.error("send error:", err);
       setErrorMsg("Something went wrong.");
+    } finally {
+      setIsSendingMessage(false);
     }
   };
 
@@ -1479,7 +1499,8 @@ export default function ChatView({
 
                               {m.type === "text" && (
                                 <button
-                                  className="text-gray-400 hover:text-gray-700 opacity-0 group-hover:opacity-100 transition"
+                                  disabled={isTranslating}
+                                  className="text-gray-400 hover:text-gray-700 opacity-0 group-hover:opacity-100 transition disabled:opacity-40 disabled:cursor-not-allowed"
                                   onClick={() => handleTranslation(m)}
                                 >
                                   <Globe className="w-4 h-4" />
@@ -1519,10 +1540,12 @@ export default function ChatView({
                             )}
                             {m.type === "text" && (
                               <button
+                                disabled={isTranslating}
                                 className={`absolute top-1/2 -translate-y-1/2 
                                   -left-5
                                   opacity-0 group-hover:opacity-100 
-                                  text-gray-400 hover:text-gray-700`}
+                                  text-gray-400 hover:text-gray-700
+                                  disabled:opacity-40 disabled:cursor-not-allowed transition`}
                                   onClick={() => handleTranslation(m)}
                               >
                                 <Globe className="w-4 h-4" />
@@ -1638,15 +1661,17 @@ export default function ChatView({
                   )}
                 <input
                   type="text"
-                  className="flex-1 border rounded-2xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="flex-1 border rounded-2xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:bg-gray-100 disabled:cursor-not-allowed"
                   placeholder="Type a message..."
                   value={newMessage}
                   onChange={handleInputChange}
-                  onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
+                  onKeyDown={(e) => e.key === "Enter" && !isSendingMessage && handleSendMessage()}
+                  disabled={isSendingMessage}
                 />
                 <button
                   onClick={handleSendMessage}
-                  className="bg-blue-500 text-white rounded-full p-2 hover:bg-blue-600"
+                  disabled={isSendingMessage}
+                  className="bg-blue-500 text-white rounded-full p-2 hover:bg-blue-600 disabled:opacity-50 disabled:bg-gray-400 disabled:cursor-not-allowed transition"
                 >
                   <Send className="w-5 h-5" />
                 </button>
