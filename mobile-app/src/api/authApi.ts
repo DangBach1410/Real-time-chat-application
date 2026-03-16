@@ -64,7 +64,13 @@ export const updateUser = (userId: string, data: UpdateRequest) => {
   return api.put<UserResponse>(`/auth/users/${userId}`, data);
 };
 
-export const updateUserImage = (userId: string, formData: FormData) => {
+// Chỉnh sửa tham số nhận vào là 'file' thay vì 'formData' trực tiếp
+export const updateUserImage = (userId: string, file: any) => {
+  const formData = new FormData();
+  
+  // Key "file" ở đây phải trùng khớp với @RequestPart("file") ở Backend
+  formData.append("file", file);
+
   return api.put(`/auth/users/${userId}/update-image`, formData, {
     headers: {
       "Content-Type": "multipart/form-data",

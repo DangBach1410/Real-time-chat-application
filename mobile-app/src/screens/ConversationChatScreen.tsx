@@ -14,6 +14,7 @@ import {
   Alert,
   Pressable,
   TouchableWithoutFeedback,
+  Keyboard,
 } from "react-native";
 import { useChatContext } from "../context/ChatContext";
 import { useNavigation, useRoute } from "@react-navigation/native";
@@ -239,7 +240,7 @@ const renderMessageContent = (
           // 1. Chuẩn bị payload (Giả định data, user, userId đã có sẵn trong scope)
           const payload: CallRequest = {
             type: isVideo ? "video" : "audio",
-            conversationId: m.conversationId, 
+            conversationId: m.conversationId,
             callerId: currentUserId,
             callerName: user.fullName,
             callerImage: user.imageUrl || DEFAULT_AVATAR,
@@ -262,7 +263,7 @@ const renderMessageContent = (
         } catch (error) {
           console.error("❌ Failed to join call:", error);
           // Bạn nên thêm Alert ở đây để báo cho người dùng nếu API lỗi
-          Alert.alert("Lỗi", "Không thể tham gia cuộc gọi lúc này.");
+          Alert.alert("Error", "Unable to join call. Please try again later.");
         }
       };
       return (
@@ -477,7 +478,15 @@ const MessageRow = memo(
             : undefined
         }
       >
-        {renderMessageContent(m, isOwn, highlightedMessageId, highlightQuery, navigation, currentUserId, user)}
+        {renderMessageContent(
+          m,
+          isOwn,
+          highlightedMessageId,
+          highlightQuery,
+          navigation,
+          currentUserId,
+          user,
+        )}
       </View>
     );
 
@@ -572,6 +581,7 @@ export default function ConversationChatScreen() {
   const [hasMore, setHasMore] = useState(true);
   const [typingUsers, setTypingUsers] = useState<Record<string, boolean>>({});
   const [isTyping, setIsTyping] = useState(false);
+  const [connected, setConnected] = useState(false);
   const [highlightedMessageId, setHighlightedMessageId] = useState<
     string | null
   >(null);
@@ -600,6 +610,24 @@ export default function ConversationChatScreen() {
   const [firstLoad, setFirstLoad] = useState(true);
   const navigation = useNavigation<any>();
   const { user, currentUserId } = useChatContext();
+
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
+
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => setKeyboardHeight(42) // Khi mở bàn phím, set padding là 42
+    );
+    const hideSubscription = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => setKeyboardHeight(0) // Khi đóng bàn phím, trả về 0
+    );
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
 
   const getUserLanguage = () => {
     return (
@@ -704,15 +732,16 @@ export default function ConversationChatScreen() {
   useEffect(() => {
     if (!conversationId) return;
 
-    const socket = new SockJS(`${process.env.EXPO_PUBLIC_API_URL}:8083/ws`);
+    const socket = new SockJS(`${process.env.EXPO_PUBLIC_API_URL}:8762/ws`);
     const client = new StompJs.Client({
       webSocketFactory: () => socket as any,
       debug: (str) => console.log(str),
-      reconnectDelay: 5000,
+      reconnectDelay: 1000,
     });
 
     client.onConnect = () => {
       console.log("STOMP connected");
+      setConnected(true);
       client.subscribe(`/topic/conversations/${conversationId}`, (message) => {
         try {
           const newMsg = JSON.parse(message.body) as MessageResponse;
@@ -747,13 +776,19 @@ export default function ConversationChatScreen() {
     stompClientRef.current = client;
 
     return () => {
+      setConnected(false);
       client.deactivate();
       console.log("STOMP disconnected");
     };
   }, [conversationId]);
 
   const sendTypingEvent = (typing: boolean) => {
-    if (!stompClientRef.current || !conversationId) return;
+    if (
+      !stompClientRef.current ||
+      !stompClientRef.current.connected ||
+      !conversationId
+    )
+      return;
     stompClientRef.current.publish({
       destination: "/app/typing",
       body: JSON.stringify({
@@ -778,7 +813,7 @@ export default function ConversationChatScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ["images", "videos"],
       allowsMultipleSelection: true,
-      quality: 1,
+      quality: 0.5,
     });
 
     if (result.canceled || !result.assets?.length) return;
@@ -875,6 +910,10 @@ export default function ConversationChatScreen() {
   };
 
   const handleSendMessage = async () => {
+    if (!connected) {
+      Alert.alert("Connecting", "Please wait until connection is established");
+      return;
+    }
     if (!newMessage.trim() || !conversationId) return;
 
     try {
@@ -1154,10 +1193,8 @@ export default function ConversationChatScreen() {
         backgroundColor: "#000000",
       }}
     >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        style={{ flex: 1, backgroundColor: "#fff" }}
-      >
+      <View style={{ flex: 1, backgroundColor: "#fff" }}>
+        {/* 1. CHAT HEADER NẰM NGOÀI KEYBOARD AVOIDING VIEW */}
         <ChatHeader
           conversation={conversation}
           currentUserId={currentUserId}
@@ -1168,271 +1205,305 @@ export default function ConversationChatScreen() {
           }
         />
 
-        <View style={{ flex: 1 }}>
-          {loading && !messages.length ? (
-            <View
-              style={{
-                flex: 1,
-                justifyContent: "center",
-                alignItems: "center",
-              }}
-            >
-              <ActivityIndicator size="large" color="#3b82f6" />
-            </View>
-          ) : (
-            <FlatList
-              ref={flatListRef}
-              data={messages}
-              renderItem={renderMessageItem}
-              keyExtractor={(item) => item.id}
-              onScroll={handleScroll}
-              scrollEventThrottle={16}
-              maintainVisibleContentPosition={{
-                minIndexForVisible: 1,
-                autoscrollToTopThreshold: -1,
-              }}
-              initialNumToRender={20}
-              maxToRenderPerBatch={20}
-              windowSize={21}
-              removeClippedSubviews={Platform.OS === "android"}
-              ListHeaderComponent={
-                loading ? (
-                  <ActivityIndicator
-                    size="small"
-                    color="#3b82f6"
-                    style={{ marginVertical: 8 }}
-                  />
-                ) : null
-              }
-              ListEmptyComponent={
-                !loading ? (
-                  <View
-                    style={{
-                      flex: 1,
-                      justifyContent: "center",
-                      alignItems: "center",
-                    }}
-                  >
-                    <Text style={{ color: "#9ca3af", fontSize: 14 }}>
-                      No messages yet
-                    </Text>
-                  </View>
-                ) : null
-              }
-            />
-          )}
+        {/* 2. KEYBOARD AVOIDING VIEW CHỈ BỌC DANH SÁCH VÀ INPUT */}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === "ios" ? "padding" : "height"}
+          style={{ flex: 1 }}
+        >
+          <View style={{ flex: 1 }}>
+            {loading && !messages.length ? (
+              <View
+                style={{
+                  flex: 1,
+                  justifyContent: "center",
+                  alignItems: "center",
+                }}
+              >
+                <ActivityIndicator size="large" color="#3b82f6" />
+              </View>
+            ) : (
+              <FlatList
+                ref={flatListRef}
+                data={messages}
+                renderItem={renderMessageItem}
+                keyExtractor={(item) => item.id}
+                onScroll={handleScroll}
+                scrollEventThrottle={16}
+                maintainVisibleContentPosition={{
+                  minIndexForVisible: 1,
+                  autoscrollToTopThreshold: -1,
+                }}
+                initialNumToRender={20}
+                maxToRenderPerBatch={10}
+                windowSize={21}
+                removeClippedSubviews={true}
+                ListHeaderComponent={
+                  loading ? (
+                    <ActivityIndicator
+                      size="small"
+                      color="#3b82f6"
+                      style={{ marginVertical: 8 }}
+                    />
+                  ) : null
+                }
+                ListEmptyComponent={
+                  !loading ? (
+                    <View
+                      style={{
+                        flex: 1,
+                        justifyContent: "center",
+                        alignItems: "center",
+                      }}
+                    >
+                      <Text style={{ color: "#9ca3af", fontSize: 14 }}>
+                        No messages yet
+                      </Text>
+                    </View>
+                  ) : null
+                }
+              />
+            )}
 
-          {/* Typing Indicator */}
-          {activeTypingUsers.length > 0 && (
-            <TypingIndicator users={activeTypingUsers as any} />
-          )}
+            {/* Typing Indicator */}
+            {activeTypingUsers.length > 0 && (
+              <TypingIndicator users={activeTypingUsers as any} />
+            )}
 
-          {errorMsg && (
-            <View
-              style={{
-                backgroundColor: "#fee2e2",
-                paddingHorizontal: 12,
-                paddingVertical: 8,
-              }}
-            >
-              <Text style={{ color: "#dc2626", fontSize: 12 }}>{errorMsg}</Text>
-            </View>
-          )}
-          {audioRecorder.isRecording && (
+            {/* Error Message */}
+            {errorMsg && (
+              <View
+                style={{
+                  backgroundColor: "#fee2e2",
+                  paddingHorizontal: 12,
+                  paddingVertical: 8,
+                }}
+              >
+                <Text style={{ color: "#dc2626", fontSize: 12 }}>
+                  {errorMsg}
+                </Text>
+              </View>
+            )}
+
+            {/* Audio Recorder Status */}
+            {audioRecorder.isRecording && (
+              <View
+                style={{
+                  flexDirection: "row",
+                  alignItems: "center",
+                  paddingHorizontal: 12,
+                  paddingBottom: 6,
+                }}
+              >
+                <MaterialIcons
+                  name="fiber-manual-record"
+                  size={12}
+                  color="#ef4444"
+                />
+                <Text style={{ marginLeft: 6, color: "#ef4444", fontSize: 12 }}>
+                  Recording... {Math.floor(audioRecorder.duration / 1000)}s
+                </Text>
+              </View>
+            )}
+
+            {/* Input Area */}
             <View
               style={{
                 flexDirection: "row",
-                alignItems: "center",
                 paddingHorizontal: 12,
-                paddingBottom: 6,
+                paddingVertical: 12,
+                paddingBottom: keyboardHeight > 0 ? keyboardHeight : 12,
+                borderTopWidth: 1,
+                borderTopColor: "#e5e7eb",
+                alignItems: "flex-end",
+                gap: 8,
+                backgroundColor: connected ? "#fff" : "#f3f4f6",
               }}
             >
-              <MaterialIcons
-                name="fiber-manual-record"
-                size={12}
-                color="#ef4444"
-              />
-              <Text style={{ marginLeft: 6, color: "#ef4444", fontSize: 12 }}>
-                Recording... {Math.floor(audioRecorder.duration / 1000)}s
-              </Text>
-            </View>
-          )}
-
-          {/* Input Area */}
-          <View
-            style={{
-              flexDirection: "row",
-              paddingHorizontal: 12,
-              paddingVertical: 12,
-              borderTopWidth: 1,
-              borderTopColor: "#e5e7eb",
-              alignItems: "flex-end",
-              gap: 8,
-            }}
-          >
-            <TouchableOpacity
-              onPress={handlePickMedia}
-              style={{
-                width: 36,
-                height: 36,
-                justifyContent: "center",
-                alignItems: "center",
-              }}
-            >
-              <MaterialIcons name="photo-library" size={20} color="#6b7280" />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={handlePickFile}
-              style={{
-                width: 36,
-                height: 36,
-                justifyContent: "center",
-                alignItems: "center",
-              }}
-            >
-              <MaterialIcons name="attach-file" size={20} color="#6b7280" />
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              onPress={handleMicPress}
-              style={{
-                width: 36,
-                height: 36,
-                justifyContent: "center",
-                alignItems: "center",
-              }}
-            >
-              <MaterialIcons
-                name={audioRecorder.isRecording ? "stop-circle" : "mic"}
-                size={22}
-                color={audioRecorder.isRecording ? "#ef4444" : "#6b7280"}
-              />
-            </TouchableOpacity>
-
-            <TextInput
-              style={{
-                flex: 1,
-                borderWidth: 1,
-                borderColor: "#e5e7eb",
-                borderRadius: 20,
-                paddingHorizontal: 16,
-                paddingVertical: 10,
-                fontSize: 14,
-                maxHeight: 100,
-              }}
-              editable={!audioRecorder.isRecording}
-              placeholder={
-                audioRecorder.isRecording
-                  ? "Recording audio..."
-                  : "Type a message..."
-              }
-              value={newMessage}
-              onChangeText={handleInputChange}
-              multiline={true}
-            />
-
-            <TouchableOpacity
-              onPress={handleSendMessage}
-              style={{
-                backgroundColor: "#3b82f6",
-                width: 36,
-                height: 36,
-                borderRadius: 18,
-                justifyContent: "center",
-                alignItems: "center",
-              }}
-            >
-              <MaterialIcons name="send" size={18} color="#fff" />
-            </TouchableOpacity>
-          </View>
-
-          {/* Action menu overlay (long-press) */}
-          {actionMenuVisible && selectedMessageForAction && (
-            <>
-              <TouchableWithoutFeedback onPress={closeActionMenu}>
-                <View style={StyleSheet.absoluteFill} />
-              </TouchableWithoutFeedback>
-              <View
+              <TouchableOpacity
+                disabled={!connected}
+                onPress={handlePickMedia}
                 style={{
-                  position: "absolute",
-                  bottom: 66,
-                  left: 0,
-                  right: 0,
+                  width: 36,
+                  height: 36,
+                  justifyContent: "center",
+                  alignItems: "center",
+                  opacity: connected ? 1 : 0.5,
                 }}
-                pointerEvents="box-none"
               >
+                <MaterialIcons name="photo-library" size={20} color="#6b7280" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                disabled={!connected}
+                onPress={handlePickFile}
+                style={{
+                  width: 36,
+                  height: 36,
+                  justifyContent: "center",
+                  alignItems: "center",
+                  opacity: connected ? 1 : 0.5,
+                }}
+              >
+                <MaterialIcons name="attach-file" size={20} color="#6b7280" />
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                disabled={!connected}
+                onPress={handleMicPress}
+                style={{
+                  width: 36,
+                  height: 36,
+                  justifyContent: "center",
+                  alignItems: "center",
+                  opacity: connected ? 1 : 0.5,
+                }}
+              >
+                <MaterialIcons
+                  name={audioRecorder.isRecording ? "stop-circle" : "mic"}
+                  size={22}
+                  color={audioRecorder.isRecording ? "#ef4444" : "#6b7280"}
+                />
+              </TouchableOpacity>
+
+              <TextInput
+                style={{
+                  flex: 1,
+                  borderWidth: 1,
+                  borderColor: "#e5e7eb",
+                  borderRadius: 20,
+                  paddingHorizontal: 16,
+                  paddingVertical: 10,
+                  fontSize: 14,
+                  maxHeight: 100,
+                  opacity: connected ? 1 : 0.6,
+                }}
+                editable={connected && !audioRecorder.isRecording}
+                placeholder={
+                  !connected
+                    ? "Connecting..."
+                    : audioRecorder.isRecording
+                      ? "Recording audio..."
+                      : "Type a message..."
+                }
+                value={newMessage}
+                onChangeText={handleInputChange}
+                multiline={true}
+              />
+
+              <TouchableOpacity
+                disabled={!connected}
+                onPress={handleSendMessage}
+                style={{
+                  backgroundColor: connected ? "#3b82f6" : "#d1d5db",
+                  width: 36,
+                  height: 36,
+                  borderRadius: 18,
+                  justifyContent: "center",
+                  alignItems: "center",
+                }}
+              >
+                <MaterialIcons name="send" size={18} color="#fff" />
+              </TouchableOpacity>
+            </View>
+
+            {/* Action menu overlay (long-press) */}
+            {actionMenuVisible && selectedMessageForAction && (
+              <>
+                <TouchableWithoutFeedback onPress={closeActionMenu}>
+                  <View style={StyleSheet.absoluteFill} />
+                </TouchableWithoutFeedback>
                 <View
                   style={{
-                    backgroundColor: "#fff",
-                    borderRadius: 8,
-                    paddingVertical: 16,
-                    paddingHorizontal: 8,
-                    elevation: 6,
-                    shadowColor: "#000",
-                    shadowOpacity: 0.12,
-                    shadowRadius: 8,
-                    flexDirection: "row",
+                    position: "absolute",
+                    bottom: 66,
+                    left: 0,
+                    right: 0,
                   }}
+                  pointerEvents="box-none"
                 >
-                  <TouchableOpacity
+                  <View
                     style={{
-                      flex: 1,
-                      flexDirection: "row",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      paddingVertical: 8,
+                      backgroundColor: "#fff",
+                      borderRadius: 8,
+                      paddingVertical: 16,
                       paddingHorizontal: 8,
-                    }}
-                    onPress={() => {
-                      // close first so it disappears immediately
-                      const msg = selectedMessageForAction;
-                      closeActionMenu();
-                      if (msg) handleTranslation(msg);
+                      elevation: 6,
+                      shadowColor: "#000",
+                      shadowOpacity: 0.12,
+                      shadowRadius: 8,
+                      flexDirection: "row",
                     }}
                   >
-                    <MaterialIcons name="translate" size={16} color="#111827" />
-                    <Text
-                      style={{ fontSize: 14, color: "#111827", marginLeft: 4 }}
+                    <TouchableOpacity
+                      style={{
+                        flex: 1,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        paddingVertical: 8,
+                        paddingHorizontal: 8,
+                      }}
+                      onPress={() => {
+                        const msg = selectedMessageForAction;
+                        closeActionMenu();
+                        if (msg) handleTranslation(msg);
+                      }}
                     >
-                      Translate
-                    </Text>
-                  </TouchableOpacity>
+                      <MaterialIcons
+                        name="translate"
+                        size={16}
+                        color="#111827"
+                      />
+                      <Text
+                        style={{
+                          fontSize: 14,
+                          color: "#111827",
+                          marginLeft: 4,
+                        }}
+                      >
+                        Translate
+                      </Text>
+                    </TouchableOpacity>
 
-                  <TouchableOpacity
-                    style={{
-                      flex: 1,
-                      flexDirection: "row",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      paddingVertical: 8,
-                      paddingHorizontal: 8,
-                    }}
-                    onPress={() => {
-                      const msg = selectedMessageForAction;
-                      closeActionMenu();
-                      if (msg?.content) {
-                        Clipboard.setStringAsync(msg.content);
-                      }
-                    }}
-                  >
-                    <MaterialIcons
-                      name="content-copy"
-                      size={16}
-                      color="#111827"
-                    />
-                    <Text
-                      style={{ fontSize: 14, color: "#111827", marginLeft: 4 }}
+                    <TouchableOpacity
+                      style={{
+                        flex: 1,
+                        flexDirection: "row",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        paddingVertical: 8,
+                        paddingHorizontal: 8,
+                      }}
+                      onPress={() => {
+                        const msg = selectedMessageForAction;
+                        closeActionMenu();
+                        if (msg?.content) {
+                          Clipboard.setStringAsync(msg.content);
+                        }
+                      }}
                     >
-                      Copy
-                    </Text>
-                  </TouchableOpacity>
+                      <MaterialIcons
+                        name="content-copy"
+                        size={16}
+                        color="#111827"
+                      />
+                      <Text
+                        style={{
+                          fontSize: 14,
+                          color: "#111827",
+                          marginLeft: 4,
+                        }}
+                      >
+                        Copy
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
-              </View>
-            </>
-          )}
-        </View>
-      </KeyboardAvoidingView>
+              </>
+            )}
+          </View>
+        </KeyboardAvoidingView>
+      </View>
     </SafeAreaView>
   );
 }

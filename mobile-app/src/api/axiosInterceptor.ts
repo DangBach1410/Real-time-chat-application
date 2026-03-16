@@ -1,5 +1,8 @@
 import axios from "axios";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Alert } from "react-native";
+import { navigationRef } from "../navigation/AppNavigator";
+import { globalLogout } from "../context/AuthContext";
 
 const api = axios.create({
   // baseURL: process.env.API_URL + ":8762/api/v1",
@@ -21,12 +24,23 @@ api.interceptors.request.use(async (config) => {
   return config;
 });
 
-// Refresh token when 401
+// Response interceptor: refresh token on 401, handle banned on 403
 api.interceptors.response.use(
   (res) => res,
   async (error) => {
     const original = error.config;
 
+    // Handle banned user
+    if (error.response?.status === 403) {
+      Alert.alert('Your account has been banned. Please contact support.');
+      if (globalLogout) await globalLogout();
+      if (navigationRef.isReady()) {
+        navigationRef.navigate('Login' as never);
+      }
+      return Promise.reject(error);
+    }
+
+    // Refresh token on 401
     if (error.response?.status === 401 && !original._retry) {
       original._retry = true;
 

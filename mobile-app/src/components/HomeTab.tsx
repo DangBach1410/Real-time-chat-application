@@ -194,7 +194,7 @@ export default function HomeTab() {
   useEffect(() => {
     if (!currentUserId) return;
 
-    const socket = new SockJS(`${process.env.EXPO_PUBLIC_API_URL}:8085/ws-presence`);
+    const socket = new SockJS(`${process.env.EXPO_PUBLIC_API_URL}:8762/ws-presence`);
     const client = new StompJs.Client({
       webSocketFactory: () => socket as any,
       debug: (str) => console.log("Presence WS:", str),
@@ -241,7 +241,7 @@ export default function HomeTab() {
   useEffect(() => {
     if (!currentUserId) return;
 
-    const socket = new SockJS(`${process.env.EXPO_PUBLIC_API_URL}:8083/ws`);
+    const socket = new SockJS(`${process.env.EXPO_PUBLIC_API_URL}:8762/ws`);
     const client = new StompJs.Client({
       webSocketFactory: () => socket as any,
       debug: (str) => console.log("Global STOMP:", str),

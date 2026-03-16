@@ -2,6 +2,8 @@
 import { createContext, useContext, useState, useEffect } from "react";
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+export let globalLogout: (() => Promise<void>) | null = null;
+
 function isTokenExpired(token: string): boolean {
   try {
     const payload = JSON.parse(atob(token.split(".")[1]));
@@ -53,6 +55,9 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setIsLoggedIn(false);
     await AsyncStorage.clear();
   };
+
+  // Set global logout for interceptors
+  globalLogout = logout;
 
   return (
     <AuthContext.Provider value={{ isLoggedIn, login, logout }}>

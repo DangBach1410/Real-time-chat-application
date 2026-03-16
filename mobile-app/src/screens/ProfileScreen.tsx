@@ -29,6 +29,18 @@ export default function ProfileScreen() {
     logout();
   };
 
+  /**
+   * Chuyển đổi object từ ImagePicker thành định dạng File 
+   * để có thể gửi qua FormData hoặc API.
+   */
+  const assetToFile = (asset: any) => ({
+    uri: asset.uri,
+    // Ưu tiên lấy fileName có sẵn, nếu không thì cắt từ đuôi URI, cuối cùng là mặc định "file"
+    name: asset.fileName || asset.uri.split("/").pop() || "file",
+    // Lấy mimeType (ví dụ: image/jpeg), nếu không có thì dùng định dạng stream chung
+    type: asset.mimeType || "application/octet-stream",
+  }) as any;
+
   const pickImage = async () => {
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) {
@@ -39,37 +51,32 @@ export default function ProfileScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['images'],
       allowsMultipleSelection: false,
-      quality: 0.7,
+      quality: 0.5,
     });
 
     if (result.canceled || !result.assets?.length) return;
 
-    if (!result.canceled && result.assets.length > 0) {
-      const asset = result.assets[0];
+    try {
+      setUploading(true);
 
-      try {
-        setUploading(true);
+      // 1. Chuyển asset thành object file chuẩn (uri, name, type)
+      const file = assetToFile(result.assets[0]);
 
-        const formData = new FormData();
-        formData.append("file", {
-          uri: asset.uri,
-          name: asset.fileName || `avatar_${Date.now()}.jpg`,
-          type: asset.mimeType || "image/jpeg",
-        } as any);
+      // 2. Gọi API và truyền object file đó vào
+      // Service sẽ tự lo việc bọc FormData và đặt key là "file"
+      const res = await updateUserImage(currentUserId!, file);
 
-        const res = await updateUserImage(currentUserId!, formData);
-
-        if (res?.data?.status === 200 && res.data.imageUrl) {
-          setUser({
-            ...user,
-            imageUrl: res.data.imageUrl,
-          });
-        }
-      } catch (err) {
-        console.error("Upload image failed:", err);
-      } finally {
-        setUploading(false);
+      if (res?.data?.status === 200 && res.data.imageUrl) {
+        setUser({
+          ...user,
+          imageUrl: res.data.imageUrl,
+        });
       }
+    } catch (err) {
+      console.error("Upload image failed:", err);
+      Alert.alert("Error", "Could not update profile picture.");
+    } finally {
+      setUploading(false);
     }
   };
 

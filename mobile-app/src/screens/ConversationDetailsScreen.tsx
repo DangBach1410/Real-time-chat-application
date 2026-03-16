@@ -125,6 +125,8 @@ export default function ConversationDetailsScreen() {
   const [filesHasMore, setFilesHasMore] = useState(true);
   const [linksHasMore, setLinksHasMore] = useState(true);
 
+  const [uploadingImage, setUploadingImage] = useState(false);
+
   const PAGE_SIZE = 20;
 
   const navigation = useNavigation<any>();
@@ -239,6 +241,18 @@ export default function ConversationDetailsScreen() {
     await Linking.openURL(url);
   };
 
+  /**
+   * Chuyển đổi object từ ImagePicker thành định dạng File 
+   * để có thể gửi qua FormData hoặc API.
+   */
+  const assetToFile = (asset: any) => ({
+    uri: asset.uri,
+    // Ưu tiên lấy fileName có sẵn, nếu không thì cắt từ đuôi URI, cuối cùng là mặc định "file"
+    name: asset.fileName || asset.uri.split("/").pop() || "file",
+    // Lấy mimeType (ví dụ: image/jpeg), nếu không có thì dùng định dạng stream chung
+    type: asset.mimeType || "application/octet-stream",
+  }) as any;
+
   const handleUpdateGroupImage = async () => {
     if (conversation.type !== "group") return;
 
@@ -249,30 +263,33 @@ export default function ConversationDetailsScreen() {
     }
 
     const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ["images"],
+      mediaTypes: ["images"], // Changed to standard array syntax instead of older enum if applicable
       allowsMultipleSelection: false,
-      quality: 1,
+      quality: 0.5,
     });
 
     if (result.canceled || !result.assets?.length) return;
-    const asset = result.assets[0];
+
     try {
-      const file = {
-        uri: asset.uri,
-        name: asset.fileName ?? "group-avatar.jpg",
-        type: asset.mimeType ?? "image/jpeg",
-      } as any;
+      setUploadingImage(true); // 1. Start loading
+
+      const file = assetToFile(result.assets[0]);
 
       const updated = await updateConversationImage(
         conversation.id,
         currentUserId,
         user?.fullName ?? "Unknown",
-        file,
+        file
       );
+      
       setConversation(updated);
-    } catch (err) {
+      Alert.alert("Success", "Group image updated successfully");
+    } catch (err: any) {
       console.error("Update group image failed", err);
-      Alert.alert("Error", "Failed to update group image");
+      // Display the actual error message if your API returns one, otherwise generic
+      Alert.alert("Error", err?.message || "Failed to update group image. Please try again.");
+    } finally {
+      setUploadingImage(false); // 2. Stop loading
     }
   };
 
@@ -400,8 +417,9 @@ export default function ConversationDetailsScreen() {
 
               {!isPrivate && (
                 <TouchableOpacity
-                  style={styles.cameraBtn}
+                  style={[styles.cameraBtn, uploadingImage && { opacity: 0.5 }]}
                   onPress={handleUpdateGroupImage}
+                  disabled={uploadingImage} // Disable when uploading
                 >
                   <MaterialIcons name="photo-camera" size={18} color="#111" />
                 </TouchableOpacity>
@@ -449,6 +467,12 @@ export default function ConversationDetailsScreen() {
 
             {!isPrivate && (
               <Text style={styles.sub}>{members.length} members</Text>
+            )}
+            {/* Add the uploading text right under the members count */}
+            {uploadingImage && (
+              <Text style={{ marginTop: 8, color: "#666", fontStyle: "italic" }}>
+                Uploading image...
+              </Text>
             )}
           </View>
 

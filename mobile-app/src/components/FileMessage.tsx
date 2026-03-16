@@ -1,10 +1,5 @@
 import React from "react";
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  Platform,
-} from "react-native";
+import { View, Text, TouchableOpacity, Platform } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { normalizeImageUrl } from "../utils/image";
 import { StyleSheet } from "react-native";
@@ -15,18 +10,17 @@ import * as FileSystemLegacy from "expo-file-system/legacy";
 import { Alert } from "react-native";
 
 const styles = StyleSheet.create({
-    fileRow: { position: "relative", paddingLeft: 20,},
-    fileIcon: {
-        position: "absolute",
-        left: 0,
-        top: 2,
-      },
-      fileText: {
-        fontSize: 12,
-        lineHeight: 16,       
-        textDecorationLine: "underline",
-        color: "#ffffff",
-      },
+  fileRow: { position: "relative", paddingLeft: 20 },
+  fileIcon: {
+    position: "absolute",
+    left: 0,
+    top: 2,
+  },
+  fileText: {
+    fontSize: 12,
+    lineHeight: 16,
+    textDecorationLine: "underline",
+  },
 });
 
 async function handleFilePress(url: string, fileName: string) {
@@ -43,74 +37,86 @@ async function handleFilePress(url: string, fileName: string) {
 
     // 3️⃣ Chưa tồn tại → tải
     if (!file.exists) {
-      Alert.alert("Đang tải", "File đang được tải về...");
+      Alert.alert("Loading", "File is being downloaded...");
       const downloaded = await File.downloadFileAsync(safeUrl, file);
 
-      Alert.alert(
-        "Hoàn tất",
-        "Đã tải file",
-        [
-          {
-            text: "Mở file",
-            onPress: () => openFile(downloaded.uri),
-          },
-        ]
-      );
+      Alert.alert("Complete", "File downloaded", [
+        {
+          text: "Open file",
+          onPress: () => openFile(downloaded.uri),
+        },
+      ]);
       return;
     }
 
     // 4️⃣ Đã tồn tại → hỏi người dùng
-    Alert.alert(
-      fileName,
-      "File đã được tải",
-      [
-        {
-          text: "Mở file",
-          onPress: () => openFile(file.uri),
+    Alert.alert(fileName, "File already downloaded", [
+      {
+        text: "Open file",
+        onPress: () => openFile(file.uri),
+      },
+      {
+        text: "Redownload",
+        onPress: async () => {
+          const downloaded = await File.downloadFileAsync(url, file, {
+            idempotent: false,
+          });
+          openFile(downloaded.uri);
         },
-        {
-          text: "Tải lại",
-          onPress: async () => {
-            const downloaded = await File.downloadFileAsync(
-              url,
-              file,
-              { idempotent: false }
-            );
-            openFile(downloaded.uri);
-          },
-        },
-        { text: "Huỷ", style: "cancel" },
-      ]
-    );
+      },
+      { text: "Cancel", style: "cancel" },
+    ]);
   } catch (err) {
     console.error("File error:", err);
-    Alert.alert("Lỗi", "Không thể xử lý file");
+    Alert.alert("Error", "Unable to process file");
   }
 }
 
 async function openFile(uri: string) {
   if (Platform.OS === "android") {
-    const contentUri =
-      await FileSystemLegacy.getContentUriAsync(uri);
+    const contentUri = await FileSystemLegacy.getContentUriAsync(uri);
 
-    await IntentLauncher.startActivityAsync(
-      "android.intent.action.VIEW",
-      {
-        data: contentUri,
-        flags: 1,
-      }
-    );
+    await IntentLauncher.startActivityAsync("android.intent.action.VIEW", {
+      data: contentUri,
+      flags: 1,
+    });
   } else {
     await Sharing.shareAsync(uri);
   }
 }
-    
-function FileMessage({ url, name, isOwn }: { url?: string; name?: string; isOwn?: boolean }) {
+
+function FileMessage({
+  url,
+  name,
+  isOwn,
+}: {
+  url?: string;
+  name?: string;
+  isOwn?: boolean;
+}) {
   return (
-    <View style={{ alignSelf: isOwn ? "flex-end" : "flex-start", marginVertical: 6, minWidth: 140,}}>
-      <TouchableOpacity style={styles.fileRow} onPress={() => handleFilePress(normalizeImageUrl(url)!, name!)}>
-        <MaterialIcons style={styles.fileIcon} name="description" size={15} color="#fff" />
-        <Text style={styles.fileText}>{name || "Download file"}</Text>
+    <View
+      style={{
+        alignSelf: isOwn ? "flex-end" : "flex-start",
+        marginVertical: 6,
+        minWidth: 140,
+      }}
+    >
+      <TouchableOpacity
+        style={styles.fileRow}
+        onPress={() => handleFilePress(normalizeImageUrl(url)!, name!)}
+      >
+        <MaterialIcons
+          style={styles.fileIcon}
+          name="description"
+          size={15}
+          color="#fff"
+        />
+        <Text
+          style={[styles.fileText, { color: isOwn ? "#ffffff" : "#000000" }]}
+        >
+          {name || "Download file"}
+        </Text>
       </TouchableOpacity>
     </View>
   );

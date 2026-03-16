@@ -5,11 +5,11 @@
     "version": "1.0.0",
     "scheme": "mychatapp",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/jochat.png",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
-      "image": "./assets/splash-icon.png",
+      "image": "./assets/jochat.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -18,8 +18,9 @@
       "bundleIdentifier": "greenwich.chatapp.mobileapp"
     },
     "android": {
+      "softwareKeyboardLayoutMode": "resize",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/jochat.png",
         "backgroundColor": "#ffffff"
       },
       "intentFilters": [

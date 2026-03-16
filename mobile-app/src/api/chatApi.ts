@@ -200,19 +200,26 @@ export async function updateConversationImage(
   conversationId: string,
   userId: string,
   userFullname: string,
-  file: File
+  file: any // Nhận object từ assetToFile
 ): Promise<ConversationResponse> {
   const formData = new FormData();
+  
+  // 1. Append file (tương ứng @RequestPart("file") ở Backend)
   formData.append("file", file);
-  formData.append("userFullname", userFullname);
+  
+  // 2. Append các field text (tương ứng @RequestParam ở Backend)
   formData.append("userId", userId);
+  formData.append("userFullname", userFullname);
 
   const res = await api.put(
     `/chat/conversations/${conversationId}/update-image`,
     formData,
-    { headers: { "Content-Type": "multipart/form-data" } }
+    { 
+      headers: { "Content-Type": "multipart/form-data" } 
+    }
   );
-  return res.data as ConversationResponse;
+  
+  return res.data; // Thường res.data đã là ConversationResponse nếu dùng Axios
 }
 
 export async function updateConversationName(
