@@ -1,0 +1,46 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main # Chạy tự động khi bạn push code lên nhánh main
+
+jobs:
+  # Giai đoạn 1: Giả lập kiểm thử
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Run Dummy Tests
+        run: |
+          echo "--- BẮT ĐẦU KIỂM THỬ ---"
+          echo "Đang chạy các bài test cho Microservices..."
+          echo "Đang chạy các bài test cho Frontend..."
+          echo "Kết quả: 100% pass (Giả lập)."
+          echo "--- KIỂM THỬ HOÀN TẤT ---"
+
+  # Giai đoạn 2: Triển khai thực tế trên VPS
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: SSH vào VPS và thực thi script
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USERNAME }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          command_timeout: 40m # Tăng thời gian chờ vì có lệnh sleep 5 phút
+          script: |
+            # Di chuyển vào thư mục dự án
+            cd /home/ubuntu/Real-time-chat-application
+            
+            # Cập nhật code mới nhất từ GitHub
+            git fetch --all
+            git reset --hard origin/main
+            
+            # Cấp quyền và chạy script deploy
+            chmod +x deploy.sh
+            ./deploy.sh
