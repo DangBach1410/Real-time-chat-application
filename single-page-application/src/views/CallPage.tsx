@@ -1,5 +1,6 @@
 // pages/CallPage.tsx
 import { useEffect, useState, useRef, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import AgoraRTC, {
   type IAgoraRTCRemoteUser,
   type ICameraVideoTrack,
@@ -11,17 +12,116 @@ import { useUser } from "../hooks/useUser";
 import { DEFAULT_AVATAR } from "../constants/common";
 import { leaveCall, getUserIdFromAgoraUid } from "../helpers/callApi";
 import { fetchUserById } from "../helpers/userApi";
+import api from "../helpers/axiosInterceptor";
 import { API_URL } from "../constants/common";
 
+function isTokenExpired(token: string): boolean {
+  try {
+    const payload = JSON.parse(atob(token.split(".")[1]));
+    const exp = payload.exp * 1000;
+    return Date.now() >= exp;
+  } catch (e) {
+    return true;
+  }
+}
+
 export default function CallPage() {
+  const navigate = useNavigate();
   const url = new URL(window.location.href);
-  const channel = url.searchParams.get("channel")!;
-  const agoraUid = parseInt(url.searchParams.get("agoraUid")!);
-  const type = url.searchParams.get("type")!; // "audio" | "video"
+  const channel = url.searchParams.get("channel");
+  const agoraUidParam = url.searchParams.get("agoraUid");
+  const type = url.searchParams.get("type");
+
+  // Validate parameters and token
+  const [isValid, setIsValid] = useState(false);
+  const [validatedParams, setValidatedParams] = useState<{
+    channel: string;
+    agoraUid: number;
+    type: "audio" | "video";
+  } | null>(null);
+
+  // Validation effect - runs before component initializes
+  useEffect(() => {
+    const validateAndSetParams = async () => {
+      // Check token and userId
+      const token = localStorage.getItem("refreshToken");
+      const userId = localStorage.getItem("userId");
+
+      if (!token || isTokenExpired(token) || !userId) {
+        localStorage.clear();
+        navigate("/login");
+        return;
+      }
+
+      // Validate URL parameters
+      if (!channel || !agoraUidParam || !type) {
+        console.warn("Missing required URL parameters");
+        navigate("/chat");
+        return;
+      }
+
+      const agoraUid = parseInt(agoraUidParam);
+      if (isNaN(agoraUid) || agoraUid <= 0) {
+        console.warn("Invalid agoraUid");
+        navigate("/chat");
+        return;
+      }
+
+      if (type !== "audio" && type !== "video") {
+        console.warn("Invalid call type");
+        navigate("/chat");
+        return;
+      }
+
+      // Validate user is a member of the conversation
+      try {
+        const response = await api.get(`/chat/conversations/${channel}`);
+        const conversation = response.data;
+
+        if (!conversation) {
+          console.warn("Invalid conversation response");
+          navigate("/chat");
+          return;
+        }
+
+        // Check if user is a member of the conversation
+        const isMember = conversation.members?.some(
+          (member: any) => member.userId === userId
+        );
+
+        if (!isMember) {
+          console.warn("User is not a member of this conversation");
+          navigate("/chat");
+          return;
+        }
+
+        // All validations passed
+        setValidatedParams({
+          channel,
+          agoraUid,
+          type: type as "audio" | "video",
+        });
+        setIsValid(true);
+      } catch (err) {
+        console.error("Error validating conversation membership:", err);
+        navigate("/chat");
+      }
+    };
+
+    validateAndSetParams();
+  }, [navigate, channel, agoraUidParam, type]);
+
+  // Early return if validation failed
+  if (!isValid || !validatedParams) {
+    return null;
+  }
+
+  // Use validated parameters from now on
+  const { channel: validChannel, agoraUid, type: validType } = validatedParams;
 
   const [remoteUsers, setRemoteUsers] = useState<IAgoraRTCRemoteUser[]>([]);
   const [isMicOn, setIsMicOn] = useState(true);
-  const [isCamOn, setIsCamOn] = useState(type === "video");
+  const [isCamOn, setIsCamOn] = useState(validType === "video");
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [remoteUserIdMap, setRemoteUserIdMap] = useState<Record<number, string>>({}); // Map agoraUid → userId
 
@@ -55,7 +155,7 @@ export default function CallPage() {
       
       for (const remoteUser of remoteUsers) {
         try {
-          const mappedUserId = await getUserIdFromAgoraUid(channel, remoteUser.uid as number);
+          const mappedUserId = await getUserIdFromAgoraUid(validChannel, remoteUser.uid as number);
           if (mappedUserId) {
             mapping[remoteUser.uid as number] = mappedUserId;
           }
@@ -70,7 +170,7 @@ export default function CallPage() {
     if (remoteUsers.length > 0) {
       mapRemoteUsersToIds();
     }
-  }, [remoteUsers, channel]);
+  }, [remoteUsers, validChannel]);
 
   // ---- Join Agora channel with NUMERIC uid ----
   useEffect(() => {
@@ -80,7 +180,7 @@ export default function CallPage() {
         AgoraRTC.checkSystemRequirements();
 
         // Use numeric agoraUid from backend
-        await agoraClient.join(APP_ID, channel, null, agoraUid);
+        await agoraClient.join(APP_ID, validChannel, null, agoraUid);
 
         const tracksToPublish: (ICameraVideoTrack | IMicrophoneAudioTrack)[] = [];
 
@@ -94,7 +194,7 @@ export default function CallPage() {
         }
 
         // 2. Cố gắng tạo Video Track nếu type là video
-        if (type === "video") {
+        if (validType === "video") {
           try {
             localVideoTrack.current = await AgoraRTC.createCameraVideoTrack();
             localVideoTrack.current.play("local-player", {
@@ -223,8 +323,8 @@ export default function CallPage() {
       }
 
       // Notify server about call end
-      if (currentUser && channel) {
-        await leaveCall(channel, userId!, currentUser.fullName);
+      if (currentUser && validChannel) {
+        await leaveCall(validChannel, userId!, currentUser.fullName);
       }
       hasLeftRef.current = true;
     } catch (err) {
@@ -237,11 +337,11 @@ export default function CallPage() {
 // ---- Leave call khi tab đóng hoặc tải lại ----
   useEffect(() => {
     const leaveCallKeepalive = () => {
-      if (!currentUser || !channel) return;
+      if (!currentUser || !validChannel) return;
       if (hasLeftRef.current) return; // Đảm bảo chỉ gọi 1 lần
 
       const accessToken = localStorage.getItem("accessToken");
-      const url = `${API_URL}:8762/api/v1/chat/calls/leave/${channel}/${userId}?userName=${encodeURIComponent(currentUser.fullName)}`;
+      const url = `${API_URL}:8762/api/v1/chat/calls/leave/${validChannel}/${userId}?userName=${encodeURIComponent(currentUser.fullName)}`;
 
       fetch(url, {
         method: "DELETE",
@@ -272,7 +372,7 @@ export default function CallPage() {
       window.removeEventListener("pagehide", handlePageHide);
       window.removeEventListener("beforeunload", handleBeforeUnload);
     };
-  }, [currentUser, channel, userId]);
+  }, [currentUser, validChannel, userId]);
 
   const totalParticipants = remoteUsers.length + 1;
   const isLocalPIP = totalParticipants > PIP_THRESHOLD;

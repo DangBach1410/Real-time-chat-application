@@ -6,8 +6,11 @@ import greenwich.chatapp.chatservice.dto.request.SendNotificationRequest;
 import greenwich.chatapp.chatservice.dto.response.CallResponse;
 import greenwich.chatapp.chatservice.dto.response.MemberResponse;
 import greenwich.chatapp.chatservice.entity.CallInfo;
+import greenwich.chatapp.chatservice.entity.ConversationEntity;
 import greenwich.chatapp.chatservice.feignclient.NotificationServiceClient;
+import greenwich.chatapp.chatservice.repository.ConversationRepository;
 import greenwich.chatapp.chatservice.util.AgoraUidGenerator;
+import greenwich.chatapp.chatservice.util.AuthenticationUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
@@ -28,9 +31,11 @@ public class CallService {
 
     private final MessageService messageService;
     private final ConversationService conversationService;
+    private final ConversationRepository conversationRepository;
     private final SimpMessagingTemplate messagingTemplate;
     private final AgoraUidGenerator agoraUidGenerator;
     private final NotificationServiceClient notificationServiceClient;
+    private final AuthenticationUtil authenticationUtil;
     private final Map<String, CallInfo> activeCalls = new ConcurrentHashMap<>();
 
     /**
@@ -38,6 +43,13 @@ public class CallService {
      * Returns the call details that frontend needs to join the Agora channel.
      */
     public CallResponse generateCallResponse(CallRequest request) {
+        // Verify conversation exists and authenticated user is a member
+        ConversationEntity conversation = conversationRepository.findById(request.getConversationId())
+                .orElseThrow(() -> new RuntimeException("Conversation not found"));
+        if (!authenticationUtil.isAuthenticatedUserInConversationMembers(conversation.getMembers())) {
+            throw new RuntimeException("User is not a member of this conversation");
+        }
+
         long agoraUid = agoraUidGenerator.generateAgoraUid(request.getCallerId());
         
         return CallResponse.builder()
@@ -53,7 +65,14 @@ public class CallService {
 
     public void startOrJoinCall(CallRequest request) {
         try {
-            log.info("[CallService] Processing start-or-join: conversationId={}, callerId={}", 
+            // Verify conversation exists and authenticated user is a member
+            ConversationEntity conversation = conversationRepository.findById(request.getConversationId())
+                    .orElseThrow(() -> new RuntimeException("Conversation not found"));
+            if (!authenticationUtil.isAuthenticatedUserInConversationMembers(conversation.getMembers())) {
+                throw new RuntimeException("User is not a member of this conversation");
+            }
+
+            log.info("[CallService] Processing start-or-join: conversationId={}, callerId={}",
                 request.getConversationId(), request.getCallerId());
             
             long agoraUid = agoraUidGenerator.generateAgoraUid(request.getCallerId());
@@ -194,6 +213,13 @@ public class CallService {
 
     public void leaveCall(String conversationId, String userId, String userName) {
         try {
+            // Verify conversation exists and authenticated user is a member
+            ConversationEntity conversation = conversationRepository.findById(conversationId)
+                    .orElseThrow(() -> new RuntimeException("Conversation not found"));
+            if (!authenticationUtil.isAuthenticatedUserInConversationMembers(conversation.getMembers())) {
+                throw new RuntimeException("User is not a member of this conversation");
+            }
+
             log.info("[CallService] Processing leaveCall: conversationId={}, userId={}", conversationId, userId);
             
             CallInfo call = activeCalls.get(conversationId);
@@ -260,6 +286,13 @@ public class CallService {
      */
     public String getUserIdFromAgoraUid(String conversationId, long agoraUid) {
         try {
+            // Verify conversation exists and authenticated user is a member
+            ConversationEntity conversation = conversationRepository.findById(conversationId)
+                    .orElseThrow(() -> new RuntimeException("Conversation not found"));
+            if (!authenticationUtil.isAuthenticatedUserInConversationMembers(conversation.getMembers())) {
+                throw new RuntimeException("User is not a member of this conversation");
+            }
+
             log.debug("[CallService] Mapping agoraUid to userId: conversationId={}, agoraUid={}", 
                 conversationId, agoraUid);
             

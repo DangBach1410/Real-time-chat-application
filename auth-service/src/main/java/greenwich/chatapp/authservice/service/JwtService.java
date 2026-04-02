@@ -34,11 +34,39 @@ public class JwtService {
     private final UserRepository userRepository;
 
     public String generateAccessToken(UserDetails userDetails) {
-        return buildToken(Map.of(), userDetails, tokenExpiration);
+        // Extract userId from UserEntity if available
+        String userId = null;
+        if (userDetails instanceof UserEntity) {
+            userId = ((UserEntity) userDetails).getId();
+        } else {
+            // Fallback: lookup user by username to get userId
+            String username = userDetails.getUsername();
+            Optional<UserEntity> userEntity = userRepository.findByUsername(username);
+            if (userEntity.isPresent()) {
+                userId = userEntity.get().getId();
+            }
+        }
+        
+        Map<String, Object> claims = Map.of("userId", userId);
+        return buildToken(claims, userDetails, tokenExpiration);
     }
 
     public String generateRefreshToken(UserDetails userDetails) {
-        return buildToken(Map.of(), userDetails, refreshTokenExpiration);
+        // Extract userId from UserEntity if available
+        String userId = null;
+        if (userDetails instanceof UserEntity) {
+            userId = ((UserEntity) userDetails).getId();
+        } else {
+            // Fallback: lookup user by username to get userId
+            String username = userDetails.getUsername();
+            Optional<UserEntity> userEntity = userRepository.findByUsername(username);
+            if (userEntity.isPresent()) {
+                userId = userEntity.get().getId();
+            }
+        }
+        
+        Map<String, Object> claims = Map.of("userId", userId);
+        return buildToken(claims, userDetails, refreshTokenExpiration);
     }
 
     private String buildToken(Map<String, Object> claims, UserDetails userDetails, long expiration) {
@@ -78,6 +106,10 @@ public class JwtService {
 
     public String extractUsername(String token) {
         return extractClaim(token, Claims::getSubject);
+    }
+
+    public String extractUserId(String token) {
+        return extractClaim(token, claims -> claims.get("userId", String.class));
     }
 
     public boolean validateToken(String token) {

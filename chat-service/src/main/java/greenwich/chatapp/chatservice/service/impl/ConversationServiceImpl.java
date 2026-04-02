@@ -13,6 +13,7 @@ import greenwich.chatapp.chatservice.feignclient.MediaServiceClient;
 import greenwich.chatapp.chatservice.repository.ConversationRepository;
 import greenwich.chatapp.chatservice.service.ConversationService;
 import greenwich.chatapp.chatservice.service.MessageService;
+import greenwich.chatapp.chatservice.util.AuthenticationUtil;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
 import org.springframework.data.domain.PageRequest;
@@ -44,6 +45,7 @@ public class ConversationServiceImpl implements ConversationService {
     private final MongoTemplate mongoTemplate;
     private final MediaServiceClient mediaServiceClient;
     private final SimpMessagingTemplate messagingTemplate;
+    private final AuthenticationUtil authenticationUtil;
 
     @Override
     @Async("taskExecutor")
@@ -136,6 +138,11 @@ public class ConversationServiceImpl implements ConversationService {
         ConversationEntity conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new RuntimeException("Conversation not found"));
 
+        // Verify authenticated user is a member of the conversation
+        if (!authenticationUtil.isAuthenticatedUserInConversationMembers(conversation.getMembers())) {
+            throw new RuntimeException("User is not a member of this conversation");
+        }
+
         String imageUrl = mediaServiceClient.uploadFiles(List.of(file)).get(0).getUrl();
 
         if (imageUrl != null && !imageUrl.isEmpty()) {
@@ -165,6 +172,11 @@ public class ConversationServiceImpl implements ConversationService {
         ConversationEntity conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new RuntimeException("Conversation not found"));
 
+        // Verify authenticated user is a member of the conversation
+        if (!authenticationUtil.isAuthenticatedUserInConversationMembers(conversation.getMembers())) {
+            throw new RuntimeException("User is not a member of this conversation");
+        }
+
         if (name != null && !name.isEmpty()) {
             conversation.setName(name);
             ConversationEntity updated = conversationRepository.save(conversation);
@@ -190,6 +202,11 @@ public class ConversationServiceImpl implements ConversationService {
     public ResponseEntity<ConversationResponse> addMembers(String conversationId, ConversationAddMemberRequest request) {
         ConversationEntity conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new RuntimeException("Conversation not found"));
+
+        // Verify authenticated user is a member of the conversation
+        if (!authenticationUtil.isAuthenticatedUserInConversationMembers(conversation.getMembers())) {
+            throw new RuntimeException("User is not a member of this conversation");
+        }
 
         List<String> newlyAddedUserIds = new ArrayList<>();
         if (request.getMembers() != null && !request.getMembers().isEmpty()) {
@@ -237,16 +254,17 @@ public class ConversationServiceImpl implements ConversationService {
         ConversationEntity conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new RuntimeException("Conversation not found"));
 
+        // Verify authenticated user is a member of the conversation
+        if (!authenticationUtil.isAuthenticatedUserInConversationMembers(conversation.getMembers())) {
+            throw new RuntimeException("User is not a member of this conversation");
+        }
+
         MemberEntity removedMember = conversation.getMembers().stream()
                 .filter(member -> member.getUserId().equals(userId))
                 .findFirst()
                 .orElseThrow(() -> new RuntimeException("Member not found in this conversation"));
 
-        conversation.getMembers().remove(removedMember);
-
-        ConversationEntity updated = conversationRepository.save(conversation);
-
-        // Gửi notification message cho việc rời nhóm
+        // Create notification
         MessageCreateRequest notificationRequest = MessageCreateRequest.builder()
                 .conversationId(conversationId)
                 .senderId(userId)
@@ -257,6 +275,10 @@ public class ConversationServiceImpl implements ConversationService {
                 .build();
 
         messageService.createNotificationMessage(notificationRequest);
+
+        // Now remove the member from the conversation
+        conversation.getMembers().remove(removedMember);
+        ConversationEntity updated = conversationRepository.save(conversation);
 
         // Gửi cập nhật conversation cho thành viên bị xoá
         ConversationEntity newConversation = conversationRepository.findById(conversationId)
@@ -269,6 +291,12 @@ public class ConversationServiceImpl implements ConversationService {
 
     @Override
     public ResponseEntity<List<ConversationResponse>> getUserConversations(String userId, int page, int size) {
+        // Verify authenticated user matches the requested userId
+        String authenticatedUserId = authenticationUtil.getAuthenticatedUserId();
+        if (!authenticatedUserId.equals(userId)) {
+            throw new RuntimeException("Unauthorized: Users can only view their own conversations");
+        }
+
         Pageable pageable = PageRequest.of(page, size);
         List<ConversationResponse> conversations = conversationRepository
                 .findByMembersUserIdOrderByLastMessageAtDesc(userId, pageable)
@@ -283,6 +311,11 @@ public class ConversationServiceImpl implements ConversationService {
         ConversationEntity conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new RuntimeException("Conversation not found"));
 
+        // Verify authenticated user is a member of the conversation
+        if (!authenticationUtil.isAuthenticatedUserInConversationMembers(conversation.getMembers())) {
+            throw new RuntimeException("User is not a member of this conversation");
+        }
+
         List<MemberResponse> members = conversation.getMembers().stream()
                 .map(m -> modelMapper.map(m, MemberResponse.class))
                 .collect(Collectors.toList());
@@ -292,6 +325,13 @@ public class ConversationServiceImpl implements ConversationService {
 
     @Override
     public ResponseEntity<List<MessageResponse>> getMedia(String conversationId, int page, int size) {
+        // Verify conversation exists and authenticated user is a member
+        ConversationEntity conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new RuntimeException("Conversation not found"));
+        if (!authenticationUtil.isAuthenticatedUserInConversationMembers(conversation.getMembers())) {
+            throw new RuntimeException("User is not a member of this conversation");
+        }
+
         Pageable pageable = PageRequest.of(page, size);
 
         Query query = new Query()
@@ -312,6 +352,13 @@ public class ConversationServiceImpl implements ConversationService {
 
     @Override
     public ResponseEntity<List<MessageResponse>> getFiles(String conversationId, int page, int size) {
+        // Verify conversation exists and authenticated user is a member
+        ConversationEntity conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new RuntimeException("Conversation not found"));
+        if (!authenticationUtil.isAuthenticatedUserInConversationMembers(conversation.getMembers())) {
+            throw new RuntimeException("User is not a member of this conversation");
+        }
+
         Pageable pageable = PageRequest.of(page, size);
 
         Query query = new Query()
@@ -332,6 +379,13 @@ public class ConversationServiceImpl implements ConversationService {
 
     @Override
     public ResponseEntity<List<MessageResponse>> getLinks(String conversationId, int page, int size) {
+        // Verify conversation exists and authenticated user is a member
+        ConversationEntity conversation = conversationRepository.findById(conversationId)
+                .orElseThrow(() -> new RuntimeException("Conversation not found"));
+        if (!authenticationUtil.isAuthenticatedUserInConversationMembers(conversation.getMembers())) {
+            throw new RuntimeException("User is not a member of this conversation");
+        }
+
         Pageable pageable = PageRequest.of(page, size);
 
         Query query = new Query()
@@ -363,11 +417,21 @@ public class ConversationServiceImpl implements ConversationService {
             throw new RuntimeException("Private conversation not found");
         }
 
+        // Verify authenticated user is a member of the conversation
+        if (!authenticationUtil.isAuthenticatedUserInConversationMembers(conversation.get().getMembers())) {
+            throw new RuntimeException("User is not a member of this conversation");
+        }
+
         return ResponseEntity.ok(modelMapper.map(conversation.get(), ConversationResponse.class));
     }
     @Override
     public ResponseEntity<List<ConversationResponse>> searchConversations(
             String currentUserId, String keyword, int page, int size) {
+        // Verify authenticated user matches the currentUserId
+        String authenticatedUserId = authenticationUtil.getAuthenticatedUserId();
+        if (!authenticatedUserId.equals(currentUserId)) {
+            throw new RuntimeException("Unauthorized: User can only search their own conversations");
+        }
 
         Pageable pageable = PageRequest.of(page, size);
 

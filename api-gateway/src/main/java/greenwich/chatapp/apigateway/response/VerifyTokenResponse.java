@@ -10,5 +10,6 @@ import lombok.Setter;
 public class VerifyTokenResponse {
     private Integer status;
     private String message;
+    private String userId;
     private String xUserToken;
 }

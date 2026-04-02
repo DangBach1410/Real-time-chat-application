@@ -61,7 +61,7 @@ public class MessageController {
             @RequestParam String keyword,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
-    ) { 
+    ) {
         return messageService.searchMessages(conversationId, keyword, page, size);
     }
     @GetMapping("/conversation/{conversationId}/context")

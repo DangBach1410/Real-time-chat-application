@@ -69,13 +69,15 @@ public class AuthenticationFilter implements GatewayFilter {
         log.info("Authentication successful: status={}, message={}, xUserToken={}",
                 status, message, xUserToken);
 
-        populateRequestWithHeader(exchange, xUserToken);
-        return chain.filter(exchange);
+        ServerWebExchange mutatedExchange = populateRequestWithHeader(exchange, xUserToken);
+        return chain.filter(mutatedExchange);
     }
 
-    private void populateRequestWithHeader(ServerWebExchange exchange, String xUserToken) {
-        exchange.getRequest().mutate()
-                .header("X-User-Token", xUserToken)
+    private ServerWebExchange populateRequestWithHeader(ServerWebExchange exchange, String xUserToken) {
+        return exchange.mutate()
+                .request(exchange.getRequest().mutate()
+                        .header("X-User-Token", xUserToken)
+                        .build())
                 .build();
     }
 }

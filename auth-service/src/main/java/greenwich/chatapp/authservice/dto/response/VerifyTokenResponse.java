@@ -11,4 +11,5 @@ public class VerifyTokenResponse {
     private Integer status;
     private String message;
     private String xUserToken;
+    private String userId;
 }

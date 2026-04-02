@@ -154,6 +154,8 @@ public class AuthenticationService {
         }
 
         String username = jwtService.extractUsername(token);
+        String userId = jwtService.extractUserId(token);
+        
         Optional<UserEntity> userFoundByUsername = userRepository.findByUsername(username);
         if (userFoundByUsername.isEmpty()) {
             log.error("verifyToken|User not found for username: {}", username);
@@ -172,14 +174,15 @@ public class AuthenticationService {
         }
 
         String role = userFoundByUsername.get().getRole().name();
-        String userInfoStr = username + ":" + role;
+        String userInfoStr = userId + ":" + role;
         String xUserToken = Base64.getEncoder().encodeToString(userInfoStr.getBytes());
 
-        log.info("verifyToken|X-User-Token: {}", xUserToken);
+        log.info("verifyToken|X-User-Token with userId: {}", xUserToken);
 
         return VerifyTokenResponse.builder()
                 .status(HttpStatus.OK.value())
                 .message("Success")
+                .userId(userId)
                 .xUserToken(xUserToken)
                 .build();
     }

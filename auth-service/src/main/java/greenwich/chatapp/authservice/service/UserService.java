@@ -7,6 +7,7 @@ import greenwich.chatapp.authservice.dto.response.*;
 import greenwich.chatapp.authservice.feignclient.ChatServiceClient;
 import greenwich.chatapp.authservice.feignclient.MediaServiceClient;
 import greenwich.chatapp.authservice.util.UnicodeUtils;
+import greenwich.chatapp.authservice.util.AuthenticationUtil;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
@@ -41,6 +42,7 @@ public class UserService {
     private final MediaServiceClient mediaServiceClient;
     private final PasswordEncoder passwordEncoder;
     private final FriendAsyncService friendAsyncService;
+    private final AuthenticationUtil authenticationUtil;
 
     @Value("${default.avatar.url}")
     String defaultAvatarUrl;
@@ -86,6 +88,15 @@ public class UserService {
     }
 
     public UserResponse getUserById(String id) {
+        // Verify authenticated user matches the requested userId
+        String authenticatedUserId = authenticationUtil.getAuthenticatedUserId();
+        if (!authenticatedUserId.equals(id)) {
+            return UserResponse.builder()
+                    .status(HttpStatus.FORBIDDEN.value())
+                    .message("Unauthorized: Users can only view their own profile")
+                    .build();
+        }
+
         Optional<UserEntity> userEntity = userRepository.findById(id);
 
         if (userEntity.isEmpty()) {
@@ -111,6 +122,15 @@ public class UserService {
     }
 
         public UserResponse updateUser(String id, @Valid UpdateRequest request) {
+            // Verify authenticated user matches the userId
+            String authenticatedUserId = authenticationUtil.getAuthenticatedUserId();
+            if (!authenticatedUserId.equals(id)) {
+                return UserResponse.builder()
+                        .status(HttpStatus.FORBIDDEN.value())
+                        .message("Unauthorized: Users can only update their own information")
+                        .build();
+            }
+
             Optional<UserEntity> userEntity = userRepository.findById(id);
 
             if (userEntity.isEmpty()) {
@@ -153,6 +173,15 @@ public class UserService {
         }
 
     public FriendRequestResponse sendFriendRequest(String senderId, String receiverId) {
+        // Verify authenticated user matches the senderId
+        String authenticatedUserId = authenticationUtil.getAuthenticatedUserId();
+        if (!authenticatedUserId.equals(senderId)) {
+            return FriendRequestResponse.builder()
+                    .status(HttpStatus.FORBIDDEN.value())
+                    .message("Unauthorized: Users can only send friend requests as themselves")
+                    .build();
+        }
+
         Optional<UserEntity> senderOpt = userRepository.findById(senderId);
         Optional<UserEntity> receiverOpt = userRepository.findById(receiverId);
 
@@ -194,6 +223,15 @@ public class UserService {
     }
 
     public AddFriendResponse acceptFriendRequest(String receiverId, String senderId) {
+        // Verify authenticated user matches the receiverId
+        String authenticatedUserId = authenticationUtil.getAuthenticatedUserId();
+        if (!authenticatedUserId.equals(receiverId)) {
+            return AddFriendResponse.builder()
+                    .status(HttpStatus.FORBIDDEN.value())
+                    .message("Unauthorized: Users can only accept requests for their own account")
+                    .build();
+        }
+
         Optional<UserEntity> receiverOpt = userRepository.findById(receiverId);
         Optional<UserEntity> senderOpt = userRepository.findById(senderId);
 
@@ -264,6 +302,15 @@ public class UserService {
     }
 
     public FriendRequestResponse deleteFriendRequest(String receiverId, String senderId) {
+        // Verify authenticated user matches the receiverId
+        String authenticatedUserId = authenticationUtil.getAuthenticatedUserId();
+        if (!authenticatedUserId.equals(receiverId)) {
+            return FriendRequestResponse.builder()
+                    .status(HttpStatus.FORBIDDEN.value())
+                    .message("Unauthorized: Users can only manage their own friend requests")
+                    .build();
+        }
+
         Optional<UserEntity> receiverOpt = userRepository.findById(receiverId);
         if (receiverOpt.isEmpty()) {
             return FriendRequestResponse.builder()
@@ -292,6 +339,12 @@ public class UserService {
     }
 
     public List<GetFriendResponse> getFriends(String userId) {
+        // Verify authenticated user matches the userId
+        String authenticatedUserId = authenticationUtil.getAuthenticatedUserId();
+        if (!authenticatedUserId.equals(userId)) {
+            throw new RuntimeException("Unauthorized: Users can only view their own friends");
+        }
+
         UserEntity user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException(USER_NOT_FOUND));
 
@@ -306,6 +359,12 @@ public class UserService {
     }
 
     public List<GetFriendRequestResponse> getFriendRequests(String userId) {
+        // Verify authenticated user matches the userId
+        String authenticatedUserId = authenticationUtil.getAuthenticatedUserId();
+        if (!authenticatedUserId.equals(userId)) {
+            throw new RuntimeException("Unauthorized: Users can only view their own friend requests");
+        }
+
         UserEntity user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException(USER_NOT_FOUND));
 
@@ -320,6 +379,12 @@ public class UserService {
     }
 
     public void unfriend(String userId, String friendId) {
+        // Verify authenticated user matches the userId
+        String authenticatedUserId = authenticationUtil.getAuthenticatedUserId();
+        if (!authenticatedUserId.equals(userId)) {
+            throw new RuntimeException("Unauthorized: Users can only manage their own friends");
+        }
+
         UserEntity user = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("User not found: " + userId));
         UserEntity friend = userRepository.findById(friendId)
@@ -345,6 +410,12 @@ public class UserService {
     }
 
     public List<SearchUserResponse> searchUsers(String currentUserId, String keyword, Pageable pageable) {
+        // Verify authenticated user matches the currentUserId
+        String authenticatedUserId = authenticationUtil.getAuthenticatedUserId();
+        if (!authenticatedUserId.equals(currentUserId)) {
+            throw new RuntimeException("Unauthorized: Users can only search from their own account");
+        }
+
         Optional<UserEntity> currentUserOpt = userRepository.findById(currentUserId);
         if (currentUserOpt.isEmpty()) {
             return List.of();
@@ -402,6 +473,15 @@ public class UserService {
     }
 
     public UserResponse changePassword(String id, @Valid ChangePasswordRequest request) {
+        // Verify authenticated user matches the userId
+        String authenticatedUserId = authenticationUtil.getAuthenticatedUserId();
+        if (!authenticatedUserId.equals(id)) {
+            return UserResponse.builder()
+                    .status(HttpStatus.FORBIDDEN.value())
+                    .message("Unauthorized: Users can only change their own password")
+                    .build();
+        }
+
         Optional<UserEntity> userEntity = userRepository.findById(id);
 
         if (userEntity.isEmpty()) {
@@ -437,6 +517,15 @@ public class UserService {
     }
 
     public UserResponse updateImage(String id, MultipartFile file) {
+        // Verify authenticated user matches the userId
+        String authenticatedUserId = authenticationUtil.getAuthenticatedUserId();
+        if (!authenticatedUserId.equals(id)) {
+            return UserResponse.builder()
+                    .status(HttpStatus.FORBIDDEN.value())
+                    .message("Unauthorized: Users can only update their own image")
+                    .build();
+        }
+
         Optional<UserEntity> userEntity = userRepository.findById(id);
 
         if (userEntity.isEmpty()) {
