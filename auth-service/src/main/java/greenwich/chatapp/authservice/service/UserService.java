@@ -302,9 +302,8 @@ public class UserService {
     }
 
     public FriendRequestResponse deleteFriendRequest(String receiverId, String senderId) {
-        // Verify authenticated user matches the receiverId
         String authenticatedUserId = authenticationUtil.getAuthenticatedUserId();
-        if (!authenticatedUserId.equals(receiverId)) {
+        if (!authenticatedUserId.equals(receiverId) && !authenticatedUserId.equals(senderId)) {
             return FriendRequestResponse.builder()
                     .status(HttpStatus.FORBIDDEN.value())
                     .message("Unauthorized: Users can only manage their own friend requests")
