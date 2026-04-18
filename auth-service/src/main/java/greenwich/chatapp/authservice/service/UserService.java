@@ -88,14 +88,6 @@ public class UserService {
     }
 
     public UserResponse getUserById(String id) {
-        // Verify authenticated user matches the requested userId
-        String authenticatedUserId = authenticationUtil.getAuthenticatedUserId();
-        if (!authenticatedUserId.equals(id)) {
-            return UserResponse.builder()
-                    .status(HttpStatus.FORBIDDEN.value())
-                    .message("Unauthorized: Users can only view their own profile")
-                    .build();
-        }
 
         Optional<UserEntity> userEntity = userRepository.findById(id);
 
