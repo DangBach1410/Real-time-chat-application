@@ -406,6 +406,9 @@ public class ConversationServiceImpl implements ConversationService {
     public ConversationResponse getConversation(String conversationId) {
         ConversationEntity conversation = conversationRepository.findById(conversationId)
                 .orElseThrow(() -> new RuntimeException("Conversation not found"));
+        if (!authenticationUtil.isAuthenticatedUserInConversationMembers(conversation.getMembers())) {
+            throw new RuntimeException("User is not a member of this conversation");
+        }
         return modelMapper.map(conversation, ConversationResponse.class);
     }
 

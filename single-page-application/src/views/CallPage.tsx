@@ -12,7 +12,7 @@ import { useUser } from "../hooks/useUser";
 import { DEFAULT_AVATAR } from "../constants/common";
 import { leaveCall, getUserIdFromAgoraUid } from "../helpers/callApi";
 import { fetchUserById } from "../helpers/userApi";
-import api from "../helpers/axiosInterceptor";
+import { fetchConversationById } from "../helpers/chatApi";
 import { API_URL } from "../constants/common";
 
 function isTokenExpired(token: string): boolean {
@@ -75,8 +75,7 @@ export default function CallPage() {
 
       // Validate user is a member of the conversation
       try {
-        const response = await api.get(`/chat/conversations/${channel}`);
-        const conversation = response.data;
+        const conversation = await fetchConversationById(channel);
 
         if (!conversation) {
           console.warn("Invalid conversation response");

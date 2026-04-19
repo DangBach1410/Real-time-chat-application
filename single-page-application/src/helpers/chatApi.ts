@@ -131,6 +131,14 @@ export async function createConversation(
   return res.data as ConversationResponse;
 }
 
+// Get conversation by ID (to verify membership)
+export async function fetchConversationById(
+  conversationId: string
+): Promise<ConversationResponse> {
+  const res = await api.get(`/chat/conversations/${conversationId}`);
+  return res.data as ConversationResponse;
+}
+
 // Lấy danh sách members của conversation
 export async function fetchConversationMembers(
   conversationId: string

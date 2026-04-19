@@ -73,6 +73,15 @@ public class ConversationController {
         return conversationService.getUserConversations(userId, page, size);
     }
 
+    @GetMapping("/{conversationId}")
+    public ResponseEntity<ConversationResponse> getConversation(@PathVariable String conversationId) {
+        ConversationResponse conversation = conversationService.getConversation(conversationId);
+        if (conversation != null) {
+            return ResponseEntity.ok(conversation);
+        }
+        return ResponseEntity.notFound().build();
+    }
+
     @GetMapping("/{conversationId}/members")
     public ResponseEntity<List<MemberResponse>> getMembers(@PathVariable String conversationId) {
         return conversationService.getMembers(conversationId);
