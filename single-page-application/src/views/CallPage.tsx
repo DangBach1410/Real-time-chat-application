@@ -20,170 +20,206 @@ function isTokenExpired(token: string): boolean {
     const payload = JSON.parse(atob(token.split(".")[1]));
     const exp = payload.exp * 1000;
     return Date.now() >= exp;
-  } catch (e) {
+  } catch {
     return true;
   }
 }
 
 export default function CallPage() {
   const navigate = useNavigate();
-  const url = new URL(window.location.href);
-  const channel = url.searchParams.get("channel");
-  const agoraUidParam = url.searchParams.get("agoraUid");
-  const type = url.searchParams.get("type");
 
   // Validate parameters and token
   const [isValid, setIsValid] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [validatedParams, setValidatedParams] = useState<{
     channel: string;
     agoraUid: number;
     type: "audio" | "video";
   } | null>(null);
 
-  // Validation effect - runs before component initializes
-  useEffect(() => {
-    const validateAndSetParams = async () => {
-      // Check token and userId
-      const token = localStorage.getItem("refreshToken");
-      const userId = localStorage.getItem("userId");
+  const ready = isValid && validatedParams !== null;
 
-      if (!token || isTokenExpired(token) || !userId) {
-        localStorage.clear();
-        navigate("/login");
-        return;
-      }
-
-      // Validate URL parameters
-      if (!channel || !agoraUidParam || !type) {
-        console.warn("Missing required URL parameters");
-        navigate("/chat");
-        return;
-      }
-
-      const agoraUid = parseInt(agoraUidParam);
-      if (isNaN(agoraUid) || agoraUid <= 0) {
-        console.warn("Invalid agoraUid");
-        navigate("/chat");
-        return;
-      }
-
-      if (type !== "audio" && type !== "video") {
-        console.warn("Invalid call type");
-        navigate("/chat");
-        return;
-      }
-
-      // Validate user is a member of the conversation
-      try {
-        const conversation = await fetchConversationById(channel);
-
-        if (!conversation) {
-          console.warn("Invalid conversation response");
-          navigate("/chat");
-          return;
-        }
-
-        // Check if user is a member of the conversation
-        const isMember = conversation.members?.some(
-          (member: any) => member.userId === userId
-        );
-
-        if (!isMember) {
-          console.warn("User is not a member of this conversation");
-          navigate("/chat");
-          return;
-        }
-
-        // All validations passed
-        setValidatedParams({
-          channel,
-          agoraUid,
-          type: type as "audio" | "video",
-        });
-        setIsValid(true);
-      } catch (err) {
-        console.error("Error validating conversation membership:", err);
-        navigate("/chat");
-      }
-    };
-
-    validateAndSetParams();
-  }, [navigate, channel, agoraUidParam, type]);
-
-  // Early return if validation failed
-  if (!isValid || !validatedParams) {
-    return null;
-  }
-
-  // Use validated parameters from now on
-  const { channel: validChannel, agoraUid, type: validType } = validatedParams;
+  const validChannel = validatedParams?.channel ?? "";
+  const agoraUid = validatedParams?.agoraUid ?? 0;
+  const validType = validatedParams?.type ?? "audio";
 
   const [remoteUsers, setRemoteUsers] = useState<IAgoraRTCRemoteUser[]>([]);
   const [isMicOn, setIsMicOn] = useState(true);
-  const [isCamOn, setIsCamOn] = useState(validType === "video");
+  const [isCamOn, setIsCamOn] = useState(false);
   const [currentUser, setCurrentUser] = useState<any>(null);
-  const [remoteUserIdMap, setRemoteUserIdMap] = useState<Record<number, string>>({}); // Map agoraUid → userId
+  const [remoteUserIdMap, setRemoteUserIdMap] = useState<Record<number, string>>({});
 
   const localAudioTrack = useRef<IMicrophoneAudioTrack | null>(null);
   const localVideoTrack = useRef<ICameraVideoTrack | null>(null);
   const hasLeftRef = useRef(false);
 
   const PIP_THRESHOLD = 6;
-  // Convert agoraUids to userIds using the mapping
-  const remoteUserIds = useMemo(() => 
-    remoteUsers
-      .map(u => remoteUserIdMap[u.uid as number])
-      .filter(Boolean), 
-    [remoteUsers, remoteUserIdMap]
-  );
-  const { users: remoteUserInfo } = useUser(remoteUserIds);
   const userId = localStorage.getItem("userId");
 
-  // fetch current user
+  const remoteUserIds = useMemo(
+    () =>
+      remoteUsers
+        .map((u) => remoteUserIdMap[u.uid as number])
+        .filter(Boolean),
+    [remoteUsers, remoteUserIdMap]
+  );
+
+  const { users: remoteUserInfo } = useUser(remoteUserIds);
+
+  // Validation effect
   useEffect(() => {
-    if (!userId) return;
+    const validateAndSetParams = async () => {
+      try {
+        setIsLoading(true);
+
+        const url = new URL(window.location.href);
+        const channel = url.searchParams.get("channel");
+        const agoraUidParam = url.searchParams.get("agoraUid");
+        const type = url.searchParams.get("type");
+
+        console.log("Starting validation...", { channel, agoraUidParam, type });
+
+        const token = localStorage.getItem("refreshToken");
+        const currentUserId = localStorage.getItem("userId");
+        console.log("Token and userId check:", {
+          hasToken: !!token,
+          hasUserId: !!currentUserId,
+        });
+
+        if (!token || isTokenExpired(token) || !currentUserId) {
+          console.warn("Token or userId validation failed");
+          localStorage.clear();
+          navigate("/login");
+          return;
+        }
+
+        if (!channel || !agoraUidParam || !type) {
+          console.warn("Missing required URL parameters", { channel, agoraUidParam, type });
+          navigate("/chat");
+          return;
+        }
+
+        const parsedAgoraUid = parseInt(agoraUidParam);
+        if (isNaN(parsedAgoraUid) || parsedAgoraUid <= 0) {
+          console.warn("Invalid agoraUid", { parsedAgoraUid });
+          navigate("/chat");
+          return;
+        }
+
+        if (type !== "audio" && type !== "video") {
+          console.warn("Invalid call type", { type });
+          navigate("/chat");
+          return;
+        }
+
+        console.log("Fetching conversation by ID:", channel);
+        let conversation;
+        try {
+          conversation = await fetchConversationById(channel);
+          console.log("Conversation fetched:", conversation);
+        } catch (fetchErr) {
+          console.error("Failed to fetch conversation:", fetchErr);
+          navigate("/chat");
+          return;
+        }
+
+        if (!conversation) {
+          console.warn("Invalid conversation response - null or undefined");
+          navigate("/chat");
+          return;
+        }
+
+        console.log(
+          "Checking membership. User ID:",
+          currentUserId,
+          "Members:",
+          conversation.members
+        );
+
+        const isMember = conversation.members?.some(
+          (member: any) => member.userId === currentUserId
+        );
+
+        if (!isMember) {
+          console.warn("User is not a member of this conversation", {
+            userId: currentUserId,
+            memberIds: conversation.members?.map((m: any) => m.userId),
+          });
+          navigate("/chat");
+          return;
+        }
+
+        console.log("All validations passed! Setting validated params");
+        setValidatedParams({
+          channel,
+          agoraUid: parsedAgoraUid,
+          type: type as "audio" | "video",
+        });
+        setIsValid(true);
+      } catch (err) {
+        console.error("Unexpected error during validation:", err);
+        navigate("/chat");
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    validateAndSetParams();
+  }, [navigate]);
+
+  // Fetch current user
+  useEffect(() => {
+    if (!ready || !userId) return;
+
     fetchUserById(userId)
-      .then(data => setCurrentUser(data))
+      .then((data) => setCurrentUser(data))
       .catch(() => console.warn("Cannot fetch current user info"));
-  }, []);
+  }, [ready, userId]);
 
   // Map remote agoraUids to userIds
   useEffect(() => {
+    if (!ready || remoteUsers.length === 0) return;
+
     const mapRemoteUsersToIds = async () => {
       const mapping: Record<number, string> = {};
-      
+
       for (const remoteUser of remoteUsers) {
         try {
-          const mappedUserId = await getUserIdFromAgoraUid(validChannel, remoteUser.uid as number);
+          const mappedUserId = await getUserIdFromAgoraUid(
+            validChannel,
+            remoteUser.uid as number
+          );
           if (mappedUserId) {
             mapping[remoteUser.uid as number] = mappedUserId;
           }
         } catch (err) {
-          console.warn(`Failed to map agoraUid ${remoteUser.uid} to userId:`, err);
+          console.warn(
+            `Failed to map agoraUid ${remoteUser.uid} to userId:`,
+            err
+          );
         }
       }
-      
+
       setRemoteUserIdMap(mapping);
     };
 
-    if (remoteUsers.length > 0) {
-      mapRemoteUsersToIds();
-    }
-  }, [remoteUsers, validChannel]);
+    mapRemoteUsersToIds();
+  }, [remoteUsers, validChannel, ready]);
 
-  // ---- Join Agora channel with NUMERIC uid ----
+  // Join Agora channel with NUMERIC uid
   useEffect(() => {
+    if (!ready) return;
+
     const init = async () => {
       try {
         AgoraRTC.setLogLevel(3);
         AgoraRTC.checkSystemRequirements();
 
-        // Use numeric agoraUid from backend
         await agoraClient.join(APP_ID, validChannel, null, agoraUid);
 
         const tracksToPublish: (ICameraVideoTrack | IMicrophoneAudioTrack)[] = [];
 
-        // 1. Cố gắng tạo Audio Track
+        // Audio track
         try {
           localAudioTrack.current = await AgoraRTC.createMicrophoneAudioTrack();
           tracksToPublish.push(localAudioTrack.current);
@@ -192,41 +228,43 @@ export default function CallPage() {
           setIsMicOn(false);
         }
 
-        // 2. Cố gắng tạo Video Track nếu type là video
+        // Video track
         if (validType === "video") {
           try {
             localVideoTrack.current = await AgoraRTC.createCameraVideoTrack();
             localVideoTrack.current.play("local-player", {
               fit: "contain",
-              mirror: true
+              mirror: true,
             });
             tracksToPublish.push(localVideoTrack.current);
             setIsCamOn(true);
           } catch (videoErr) {
             console.warn("Can not find Camera or access denied:", videoErr);
-            // Fallback: Chuyển state cam thành false để UI đồng bộ
-            setIsCamOn(false); 
+            setIsCamOn(false);
           }
+        } else {
+          setIsCamOn(false);
         }
 
-        // 3. Publish những track nào tạo thành công
+        // Publish tracks
         if (tracksToPublish.length > 0) {
           await agoraClient.publish(tracksToPublish as any);
         }
 
-        // 4. Subscribe to remote users (Bây giờ phần này luôn được chạy)
+        // Subscribe existing remote users
         for (const user of agoraClient.remoteUsers) {
           await agoraClient.subscribe(user, "video").catch(() => {});
           await agoraClient.subscribe(user, "audio").catch(() => {});
         }
         setRemoteUsers([...agoraClient.remoteUsers]);
-        
-        // remote user events
+
         const updateRemoteUsers = () => setRemoteUsers([...agoraClient.remoteUsers]);
+
         agoraClient.on("user-published", async (user, mediaType) => {
           await agoraClient.subscribe(user, mediaType);
           updateRemoteUsers();
         });
+
         agoraClient.on("user-unpublished", updateRemoteUsers);
         agoraClient.on("user-left", updateRemoteUsers);
 
@@ -246,18 +284,18 @@ export default function CallPage() {
       agoraClient.removeAllListeners();
       agoraClient.leave();
     };
-  }, []);
+  }, [ready, validChannel, agoraUid, validType]);
 
-  // ---- Play videos when remote users are ready ----
+  // Play videos when remote users are ready
   useEffect(() => {
-    remoteUsers.forEach(user => {
+    remoteUsers.forEach((user) => {
       const videoContainer = document.getElementById(`remote-${user.uid}`);
 
       if (videoContainer && user.videoTrack) {
         try {
           user.videoTrack.play(videoContainer, {
             fit: "contain",
-            mirror: true
+            mirror: true,
           });
         } catch (err) {
           console.warn(`Failed to play video for user ${user.uid}:`, err);
@@ -270,31 +308,27 @@ export default function CallPage() {
     });
   }, [remoteUsers]);
 
-  // ---- Toggle Mic / Cam ----
+  // Toggle Mic
   const toggleMic = async () => {
     if (!localAudioTrack.current) return;
-    // Use setMuted() for better audio track management
-    // When isMicOn is true, we want to mute (setMuted(true))
-    // When isMicOn is false, we want to unmute (setMuted(false))
     await localAudioTrack.current.setMuted(isMicOn);
     setIsMicOn(!isMicOn);
   };
 
+  // Toggle Cam
   const toggleCam = async () => {
     try {
       if (!isCamOn) {
-        // Enable camera
         if (!localVideoTrack.current) {
           localVideoTrack.current = await AgoraRTC.createCameraVideoTrack();
         }
         localVideoTrack.current.play("local-player", {
           fit: "contain",
-          mirror: true
+          mirror: true,
         });
         await agoraClient.publish([localVideoTrack.current]);
         setIsCamOn(true);
       } else {
-        // Disable camera - unsubscribe before closing
         if (localVideoTrack.current) {
           await agoraClient.unpublish([localVideoTrack.current]);
           localVideoTrack.current.stop();
@@ -308,10 +342,9 @@ export default function CallPage() {
     }
   };
 
-  // ---- Leave call ----
+  // Leave call
   const handleLeaveCall = async () => {
     try {
-      // Clean up media tracks before leaving
       if (localAudioTrack.current) {
         localAudioTrack.current.close();
         localAudioTrack.current = null;
@@ -321,7 +354,6 @@ export default function CallPage() {
         localVideoTrack.current = null;
       }
 
-      // Notify server about call end
       if (currentUser && validChannel) {
         await leaveCall(validChannel, userId!, currentUser.fullName);
       }
@@ -333,14 +365,18 @@ export default function CallPage() {
     }
   };
 
-// ---- Leave call khi tab đóng hoặc tải lại ----
+  // Leave call when tab closes / reloads
   useEffect(() => {
+    if (!ready) return;
+
     const leaveCallKeepalive = () => {
       if (!currentUser || !validChannel) return;
-      if (hasLeftRef.current) return; // Đảm bảo chỉ gọi 1 lần
+      if (hasLeftRef.current) return;
 
       const accessToken = localStorage.getItem("accessToken");
-      const url = `${API_URL}:8762/api/v1/chat/calls/leave/${validChannel}/${userId}?userName=${encodeURIComponent(currentUser.fullName)}`;
+      const url = `${API_URL}:8762/api/v1/chat/calls/leave/${validChannel}/${userId}?userName=${encodeURIComponent(
+        currentUser.fullName
+      )}`;
 
       fetch(url, {
         method: "DELETE",
@@ -348,19 +384,17 @@ export default function CallPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${accessToken}`,
         },
-        keepalive: true, // Vẫn giữ keepalive
-      }).catch(err => console.error("Leave call on unload failed:", err));
+        keepalive: true,
+      }).catch((err) => console.error("Leave call on unload failed:", err));
 
-      hasLeftRef.current = true; // Đánh dấu là đã gọi api
+      hasLeftRef.current = true;
     };
 
-    // Dùng pagehide (tốt cho mobile/trình duyệt hiện đại) thay vì visibilitychange
-    const handlePageHide = (event: PageTransitionEvent) => {
+    const handlePageHide = () => {
       leaveCallKeepalive();
     };
 
-    // Dùng beforeunload (tốt cho desktop)
-    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+    const handleBeforeUnload = () => {
       leaveCallKeepalive();
     };
 
@@ -371,12 +405,11 @@ export default function CallPage() {
       window.removeEventListener("pagehide", handlePageHide);
       window.removeEventListener("beforeunload", handleBeforeUnload);
     };
-  }, [currentUser, validChannel, userId]);
+  }, [ready, currentUser, validChannel, userId]);
 
   const totalParticipants = remoteUsers.length + 1;
   const isLocalPIP = totalParticipants > PIP_THRESHOLD;
 
-  // Determine grid layout based on number of participants
   const getGridColsClass = () => {
     const count = remoteUsers.length + (isLocalPIP ? 0 : 1);
     if (count === 1) return "grid-cols-1";
@@ -389,138 +422,141 @@ export default function CallPage() {
 
   return (
     <div className="flex flex-col h-screen bg-gray-900 text-white relative overflow-hidden">
-      {/* --- VIDEO GRID CONTAINER --- */}
-      <div className="flex-1 flex items-center justify-center p-4 overflow-auto">
-        <div className={`w-full h-full grid ${getGridColsClass()} gap-3 auto-rows-max content-center`}>
-          {remoteUsers.map(user => {
-            const mappedUserId = remoteUserIdMap[user.uid as number];
-            const info = mappedUserId ? remoteUserInfo[mappedUserId] : null;
-            return (
-              <div
-                key={user.uid}
-                className="relative bg-gray-800 rounded-xl overflow-hidden shadow-md hover:shadow-lg transition-shadow duration-300 aspect-video max-w-full border-2 border-gray-500"
-              >
-                <div
-                  id={`remote-${user.uid}`}
-                  className="w-full h-full bg-gray-900 flex items-center justify-center"
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                  }}
-                />
-                {/* User Badge */}
-                <div className="absolute bottom-3 left-3 flex items-center gap-2 bg-black bg-opacity-60 px-3 py-2 rounded-lg backdrop-blur-sm z-20 hover:bg-opacity-80 transition">
-                  <img
-                    src={info?.imageUrl || DEFAULT_AVATAR}
-                    alt={info?.fullName || "User"}
-                    className="w-6 h-6 rounded-full border border-gray-300"
-                  />
-                  <span className="text-sm font-medium truncate max-w-[120px]">
-                    {info?.fullName || `User ${user.uid}`}
-                  </span>
-                </div>
+      {!ready ? (
+        <div className="flex items-center justify-center h-screen bg-gray-900 w-full">
+          <div className="text-white text-lg">
+            {isLoading ? "Validating access..." : "Redirecting..."}
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* --- VIDEO GRID CONTAINER --- */}
+          <div className="flex-1 flex items-center justify-center p-4 overflow-auto">
+            <div className={`w-full h-full grid ${getGridColsClass()} gap-3 auto-rows-max content-center`}>
+              {remoteUsers.map((user) => {
+                const mappedUserId = remoteUserIdMap[user.uid as number];
+                const info = mappedUserId ? remoteUserInfo[mappedUserId] : null;
 
-                {/* Mic Status Indicator */}
-                {!user.audioTrack && (
-                  <div className="absolute top-3 right-3 bg-red-600 p-2 rounded-full z-20">
-                    <MicOff size={16} />
+                return (
+                  <div
+                    key={user.uid}
+                    className="relative bg-gray-800 rounded-xl overflow-hidden shadow-md hover:shadow-lg transition-shadow duration-300 aspect-video max-w-full border-2 border-gray-500"
+                  >
+                    <div
+                      id={`remote-${user.uid}`}
+                      className="w-full h-full bg-gray-900 flex items-center justify-center"
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                      }}
+                    />
+                    <div className="absolute bottom-3 left-3 flex items-center gap-2 bg-black bg-opacity-60 px-3 py-2 rounded-lg backdrop-blur-sm z-20 hover:bg-opacity-80 transition">
+                      <img
+                        src={info?.imageUrl || DEFAULT_AVATAR}
+                        alt={info?.fullName || "User"}
+                        className="w-6 h-6 rounded-full border border-gray-300"
+                      />
+                      <span className="text-sm font-medium truncate max-w-[120px]">
+                        {info?.fullName || `User ${user.uid}`}
+                      </span>
+                    </div>
+
+                    {!user.audioTrack && (
+                      <div className="absolute top-3 right-3 bg-red-600 p-2 rounded-full z-20">
+                        <MicOff size={16} />
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            );
-          })}
+                );
+              })}
 
-          {/* Local Video - Grid View */}
-          {!isLocalPIP && (
-            <div className="relative bg-gray-800 rounded-xl overflow-hidden shadow-md hover:shadow-lg transition-shadow duration-300 aspect-video max-w-full border-2 border-blue-500">
-              <div 
-                id="local-player" 
-                className="w-full h-full bg-gray-900 flex items-center justify-center"
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              />
-              <div className="absolute bottom-3 left-3 flex items-center gap-2 bg-blue-600 bg-opacity-80 px-3 py-2 rounded-lg backdrop-blur-sm z-20">
+              {!isLocalPIP && (
+                <div className="relative bg-gray-800 rounded-xl overflow-hidden shadow-md hover:shadow-lg transition-shadow duration-300 aspect-video max-w-full border-2 border-blue-500">
+                  <div
+                    id="local-player"
+                    className="w-full h-full bg-gray-900 flex items-center justify-center"
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                    }}
+                  />
+                  <div className="absolute bottom-3 left-3 flex items-center gap-2 bg-blue-600 bg-opacity-80 px-3 py-2 rounded-lg backdrop-blur-sm z-20">
+                    <img
+                      src={currentUser?.imageUrl || DEFAULT_AVATAR}
+                      alt="You"
+                      className="w-6 h-6 rounded-full border border-white"
+                    />
+                    <span className="text-sm font-medium">You</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* --- LOCAL PIP --- */}
+          {isLocalPIP && (
+            <div className="absolute bottom-24 right-4 w-56 h-40 bg-gray-800 rounded-xl overflow-hidden shadow-2xl border-2 border-blue-500 z-50 hover:shadow-lg transition-shadow">
+              <div id="local-player" className="w-full h-full bg-gray-900" />
+              <div className="absolute bottom-2 left-2 bg-blue-600 bg-opacity-80 px-2 py-1 rounded-lg backdrop-blur-sm flex items-center gap-1">
                 <img
                   src={currentUser?.imageUrl || DEFAULT_AVATAR}
                   alt="You"
-                  className="w-6 h-6 rounded-full border border-white"
+                  className="w-5 h-5 rounded-full border border-white"
                 />
-                <span className="text-sm font-medium">You</span>
+                <span className="text-xs font-medium">You</span>
               </div>
             </div>
           )}
-        </div>
-      </div>
 
-      {/* --- LOCAL PIP (Picture in Picture) --- */}
-      {isLocalPIP && (
-        <div className="absolute bottom-24 right-4 w-56 h-40 bg-gray-800 rounded-xl overflow-hidden shadow-2xl border-2 border-blue-500 z-50 hover:shadow-lg transition-shadow">
-          <div id="local-player" className="w-full h-full bg-gray-900" />
-          <div className="absolute bottom-2 left-2 bg-blue-600 bg-opacity-80 px-2 py-1 rounded-lg backdrop-blur-sm flex items-center gap-1">
-            <img
-              src={currentUser?.imageUrl || DEFAULT_AVATAR}
-              alt="You"
-              className="w-5 h-5 rounded-full border border-white"
-            />
-            <span className="text-xs font-medium">You</span>
+          {/* --- CONTROL BAR --- */}
+          <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 flex justify-center gap-3 p-6 z-40">
+            <div className="flex gap-3 bg-gray-800 bg-opacity-90 backdrop-blur-md px-4 py-3 rounded-full shadow-2xl border border-gray-700">
+              <button
+                onClick={toggleMic}
+                className={`p-3 rounded-full transition-all duration-200 flex items-center justify-center ${
+                  isMicOn
+                    ? "bg-gray-600 hover:bg-gray-500 text-white"
+                    : "bg-red-600 hover:bg-red-700 text-white"
+                }`}
+                title={isMicOn ? "Mute microphone (Ctrl+M)" : "Unmute microphone"}
+              >
+                {isMicOn ? <Mic size={20} /> : <MicOff size={20} />}
+              </button>
+
+              <div className="w-px bg-gray-600" />
+
+              <button
+                onClick={toggleCam}
+                className={`p-3 rounded-full transition-all duration-200 flex items-center justify-center ${
+                  isCamOn
+                    ? "bg-gray-600 hover:bg-gray-500 text-white"
+                    : "bg-red-600 hover:bg-red-700 text-white"
+                }`}
+                title={isCamOn ? "Stop camera (Ctrl+E)" : "Start camera"}
+              >
+                {isCamOn ? <Video size={20} /> : <VideoOff size={20} />}
+              </button>
+
+              <div className="w-px bg-gray-600" />
+
+              <button
+                onClick={handleLeaveCall}
+                className="p-3 rounded-full bg-red-600 hover:bg-red-700 transition-all duration-200 flex items-center justify-center text-white"
+                title="Leave call (Alt+F4)"
+              >
+                <Phone size={20} />
+              </button>
+            </div>
           </div>
-        </div>
+
+          {/* Participant Count - Top Right */}
+          <div className="absolute top-4 right-4 bg-gray-800 bg-opacity-80 backdrop-blur-sm px-3 py-2 rounded-lg text-sm font-medium z-20">
+            {totalParticipants} {totalParticipants === 1 ? "participant" : "participants"}
+          </div>
+        </>
       )}
-
-      {/* --- FLOATING CONTROL BAR (Google Meet Style) --- */}
-      <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 flex justify-center gap-3 p-6 z-40">
-        <div className="flex gap-3 bg-gray-800 bg-opacity-90 backdrop-blur-md px-4 py-3 rounded-full shadow-2xl border border-gray-700">
-          {/* Mic Button */}
-          <button
-            onClick={toggleMic}
-            className={`p-3 rounded-full transition-all duration-200 flex items-center justify-center ${
-              isMicOn
-                ? "bg-gray-600 hover:bg-gray-500 text-white"
-                : "bg-red-600 hover:bg-red-700 text-white"
-            }`}
-            title={isMicOn ? "Mute microphone (Ctrl+M)" : "Unmute microphone"}
-          >
-            {isMicOn ? <Mic size={20} /> : <MicOff size={20} />}
-          </button>
-
-          {/* Divider */}
-          <div className="w-px bg-gray-600" />
-
-          {/* Camera Button */}
-          <button
-            onClick={toggleCam}
-            className={`p-3 rounded-full transition-all duration-200 flex items-center justify-center ${
-              isCamOn
-                ? "bg-gray-600 hover:bg-gray-500 text-white"
-                : "bg-red-600 hover:bg-red-700 text-white"
-            }`}
-            title={isCamOn ? "Stop camera (Ctrl+E)" : "Start camera"}
-          >
-            {isCamOn ? <Video size={20} /> : <VideoOff size={20} />}
-          </button>
-
-          {/* Divider */}
-          <div className="w-px bg-gray-600" />
-
-          {/* Leave Call Button */}
-          <button
-            onClick={handleLeaveCall}
-            className="p-3 rounded-full bg-red-600 hover:bg-red-700 transition-all duration-200 flex items-center justify-center text-white"
-            title="Leave call (Alt+F4)"
-          >
-            <Phone size={20} />
-          </button>
-        </div>
-      </div>
-
-      {/* Participant Count - Top Right */}
-      <div className="absolute top-4 right-4 bg-gray-800 bg-opacity-80 backdrop-blur-sm px-3 py-2 rounded-lg text-sm font-medium z-20">
-        {totalParticipants} {totalParticipants === 1 ? "participant" : "participants"}
-      </div>
     </div>
   );
 }

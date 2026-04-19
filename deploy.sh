@@ -41,7 +41,7 @@ echo ">>> TRIỂN KHAI FRONTEND VỚI PM2 <<<"
 # 1. Frontend User
 echo "Đang build FE User..."
 cd single-page-application
-npm install && npm run build
+npm install --legacy-peer-deps && npm run build
 pm2 reload fe-user || pm2 start "serve -s dist -p 4001" --name "fe-user"
 cd ..
 

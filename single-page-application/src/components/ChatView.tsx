@@ -94,6 +94,7 @@ export default function ChatView({
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
+  const [isLeavingPage, setIsLeavingPage] = useState(false);
   const [isTranslating, setIsTranslating] = useState(false);
   const [usersPresence, setUsersPresence] = useState<Record<string, number>>(
     {}
@@ -195,10 +196,12 @@ export default function ChatView({
 
   // Khi props conversationId thay đổi, set selectedConversation
   useEffect(() => {
+    if (isLeavingPage) return;  // ← Don't update if we're leaving
+    
     if (conversationId && conversationId !== selectedConversation) {
       setSelectedConversation(conversationId);
     }
-  }, [conversationId]);
+  }, [conversationId, isLeavingPage]);
 
   // Khi selectedConversation thay đổi, cập nhật URL
   useEffect(() => {
@@ -455,6 +458,7 @@ export default function ChatView({
       setLoading(true);
       try {
         const data = await fetchMessages(selectedConversation, 0, PAGE_SIZE);
+      
         // Ensure messages are chronological (oldest -> newest)
         setMessages(data.sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()));
         setPage(1);
@@ -462,15 +466,22 @@ export default function ChatView({
         setTimeout(() => {
           messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
         }, 500);
-      } catch (err) {
+      } catch (err: any) {
         console.error("Failed to fetch messages:", err);
+        setIsLeavingPage(true);
+        try {
+          console.log("Attempting to navigate to /chat to reset state");
+          navigate("/chat");
+        } catch (navErr) {
+          console.error("Navigation failed:", navErr);
+        }
       } finally {
         setLoading(false);
       }
     };
 
     load();
-  }, [selectedConversation]);
+  }, [selectedConversation, navigate]);
 
   // Jump to a specific message (called from details/search)
   const handleJumpToMessage = async (m: MessageResponse, q?: string) => {

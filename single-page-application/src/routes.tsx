@@ -84,6 +84,7 @@ export default function AppRoutes() {
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
         <Route path="/oauth2/redirect" element={<OAuth2RedirectHandler />} />
+        <Route path="/call" element={<CallPage />} />
 
         {/* Layout bọc ngoài */}
         <Route element={<ChatLayout />}>
@@ -96,7 +97,6 @@ export default function AppRoutes() {
         </Route>
 
         <Route path="*" element={<Navigate to="/chat" />} />
-        <Route path="/call" element={<CallPage />} /> {/* 👈 route cho tab gọi */}
       </Routes>
     </Router>
   );
