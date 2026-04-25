@@ -10,4 +10,5 @@ public interface UserNotificationTokenRepository extends MongoRepository<UserNot
     Optional<UserNotificationToken> findByUserId(String userId);
 
     List<UserNotificationToken> findByUserIdIn(List<String> userIds);
+    void deleteByExpoPushToken(String expoPushToken);
 }

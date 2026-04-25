@@ -1,6 +1,7 @@
 package greenwich.chatapp.notificationservice.entity;
 
 import org.springframework.data.annotation.Id;
+import org.springframework.data.mongodb.core.index.Indexed;
 import org.springframework.data.mongodb.core.mapping.Document;
 import lombok.*;
 
@@ -15,6 +16,7 @@ public class UserNotificationToken {
     @Id
     private String id;
     private String userId;
+    @Indexed(unique = true)
     private String expoPushToken;
 }
 

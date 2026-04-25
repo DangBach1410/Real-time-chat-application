@@ -19,7 +19,7 @@ public class NotificationService {
     private final UserNotificationTokenRepository tokenRepository;
     private final ExpoPushClient expoPushClient;
 
-    /* ========== SAVE TOKEN ========== */
+    /* ========== SAVE TOKEN (FIXED) ========== */
     public void saveToken(SaveTokenRequest request) {
 
         if (!request.getExpoPushToken().startsWith("ExponentPushToken")) {
@@ -27,6 +27,10 @@ public class NotificationService {
             return;
         }
 
+        // 1. CLEAR the token from any other user who might have been using this device
+        tokenRepository.deleteByExpoPushToken(request.getExpoPushToken());
+
+        // 2. Proceed with the standard Save/Update logic for the current user
         UserNotificationToken token =
                 tokenRepository.findByUserId(request.getUserId())
                         .map(existing -> {

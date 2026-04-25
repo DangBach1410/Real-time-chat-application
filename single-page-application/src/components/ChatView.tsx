@@ -469,9 +469,10 @@ export default function ChatView({
       } catch (err: any) {
         console.error("Failed to fetch messages:", err);
         setIsLeavingPage(true);
+        setSelectedConversation(null);
         try {
           console.log("Attempting to navigate to /chat to reset state");
-          navigate("/chat");
+          navigate("/chat", { replace: true });
         } catch (navErr) {
           console.error("Navigation failed:", navErr);
         }
